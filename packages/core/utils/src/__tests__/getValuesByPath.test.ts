@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { getValuesByPath } from '../getValuesByPath';
 
 describe('getValuesByPath', () => {
@@ -19,6 +28,14 @@ describe('getValuesByPath', () => {
     expect(result).toEqual([1, 2]);
   });
 
+  it('should return an array of values', () => {
+    const obj = {
+      a: [{ b: 1 }],
+    };
+    const result = getValuesByPath(obj, 'a.b');
+    expect(result).toEqual([1]);
+  });
+
   it('nested array', () => {
     const obj = {
       a: [{ b: [{ c: 1 }, { c: 2 }] }, { b: [{ c: 3 }, { c: 4 }] }],
@@ -32,7 +49,7 @@ describe('getValuesByPath', () => {
       a: { b: 1 },
     };
     const result = getValuesByPath(obj, '');
-    expect(result).toEqual([]);
+    expect(result).toEqual(undefined);
   });
 
   it('when path is not found', () => {
@@ -40,7 +57,7 @@ describe('getValuesByPath', () => {
       a: { b: 1 },
     };
     const result = getValuesByPath(obj, 'a.c');
-    expect(result).toEqual([]);
+    expect(result).toEqual(undefined);
   });
 
   it('when path is not found in nested array', () => {
@@ -48,7 +65,7 @@ describe('getValuesByPath', () => {
       a: [{ b: 1 }, { b: 2 }],
     };
     const result = getValuesByPath(obj, 'a.c');
-    expect(result).toEqual([]);
+    expect(result).toEqual(undefined);
   });
 
   it('when path is not found in nested array with empty string', () => {
@@ -56,7 +73,7 @@ describe('getValuesByPath', () => {
       a: [{ b: 1 }, { b: 2 }],
     };
     const result = getValuesByPath(obj, 'a.');
-    expect(result).toEqual([]);
+    expect(result).toEqual(undefined);
   });
 
   it('when obj is null', () => {
@@ -70,7 +87,15 @@ describe('getValuesByPath', () => {
       a: { b: 1 },
     };
     const result = getValuesByPath(obj, 'a.c', null);
-    expect(result).toEqual([]);
+    expect(result).toEqual(null);
+  });
+
+  it('when return is null', () => {
+    const obj = {
+      a: { b: null },
+    };
+    const result = getValuesByPath(obj, 'a.b');
+    expect(result).toEqual(null);
   });
 
   it('should return empty array when obj key value is undefined', () => {
@@ -78,12 +103,18 @@ describe('getValuesByPath', () => {
       a: undefined,
     };
     const result = getValuesByPath(obj, 'a.b');
-    expect(result).toEqual([]);
+    expect(result).toEqual(undefined);
   });
 
   it('the initial value is an array', () => {
     const arr = [{ b: 1 }, { b: 2 }];
     const result = getValuesByPath(arr, 'b', []);
     expect(result).toEqual([1, 2]);
+  });
+
+  it('should return 0 when the initial value is 0', () => {
+    const obj = { a: 0 };
+    const result = getValuesByPath(obj, 'a');
+    expect(result).toBe(0);
   });
 });

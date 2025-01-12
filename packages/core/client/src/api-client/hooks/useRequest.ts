@@ -1,39 +1,54 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { merge } from '@formily/shared';
-import { useSetState } from 'ahooks';
-import { default as useReq } from 'ahooks/lib/useRequest';
-import { Options } from 'ahooks/lib/useRequest/src/types';
+import { useRequest as useReq, useSetState } from 'ahooks';
+import { Options, Result } from 'ahooks/es/useRequest/src/types';
 import { AxiosRequestConfig } from 'axios';
 import cloneDeep from 'lodash/cloneDeep';
-import { useContext } from 'react';
-import { APIClientContext } from '../context';
 import { assign } from './assign';
+import { useAPIClient } from './useAPIClient';
+import { SetState } from 'ahooks/lib/useSetState';
 
 type FunctionService = (...args: any[]) => Promise<any>;
+
+export type ReturnTypeOfUseRequest<TData = any> = ReturnType<typeof useRequest<TData>>;
 
 export type ResourceActionOptions<P = any> = {
   resource?: string;
   resourceOf?: any;
   action?: string;
   params?: P;
+  url?: string;
 };
 
-export function useRequest<P>(
-  service: AxiosRequestConfig<P> | ResourceActionOptions<P> | FunctionService,
-  options: Options<any, any> & { uid?: string } = {},
-) {
+export type UseRequestService<P> = AxiosRequestConfig<P> | ResourceActionOptions<P> | FunctionService;
+export type UseRequestOptions = Options<any, any> & { uid?: string };
+export interface UseRequestResult<P> extends Result<P, any> {
+  state: any;
+  setState: SetState<{}>;
+}
+
+export function useRequest<P>(service: UseRequestService<P>, options: UseRequestOptions = {}): UseRequestResult<P> {
   // 缓存用途
   const [state, setState] = useSetState({});
-  const api = useContext(APIClientContext);
+  const api = useAPIClient();
 
-  let tempOptions, tempService;
+  let tempService;
 
   if (typeof service === 'function') {
     tempService = service;
-  } else {
+  } else if (service) {
     tempService = async (params = {}) => {
-      const { resource } = service as ResourceActionOptions;
+      const { resource, url } = service as ResourceActionOptions;
       let args = cloneDeep(service);
-      if (resource) {
+      if (resource || url) {
         args.params = args.params || {};
         assign(args.params, params);
       } else {
@@ -42,9 +57,10 @@ export function useRequest<P>(
       const response = await api.request(args);
       return response?.data;
     };
+  } else {
+    tempService = async () => {};
   }
-
-  tempOptions = {
+  const tempOptions = {
     ...options,
     onSuccess(...args) {
       // @ts-ignore
@@ -55,7 +71,6 @@ export function useRequest<P>(
     },
   };
 
-  const result: any = useReq(tempService, tempOptions);
-
+  const result = useReq<P, any>(tempService, tempOptions);
   return { ...result, state, setState };
 }

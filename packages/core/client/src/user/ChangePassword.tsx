@@ -1,11 +1,21 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ISchema, useForm } from '@formily/react';
 import { uid } from '@formily/shared';
-import { Menu } from 'antd';
-import React, { useContext, useState } from 'react';
+import { MenuProps } from 'antd';
+import React, { useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActionContext, SchemaComponent, useActionContext } from '../';
+import { ActionContextProvider, DropdownVisibleContext, SchemaComponent, useActionContext } from '../';
 import { useAPIClient } from '../api-client';
-import { DropdownVisibleContext } from './CurrentUser';
+import { useNavigate } from 'react-router-dom';
+import { useSystemSettings } from '../';
 
 const useCloseAction = () => {
   const { setVisible } = useActionContext();
@@ -21,17 +31,19 @@ const useCloseAction = () => {
 };
 
 const useSaveCurrentUserValues = () => {
+  const navigate = useNavigate();
   const { setVisible } = useActionContext();
   const form = useForm();
   const api = useAPIClient();
   return {
     async run() {
       await form.submit();
-      await api.resource('users').changePassword({
+      await api.resource('auth').changePassword({
         values: form.values,
       });
       await form.reset();
       setVisible(false);
+      navigate('/signin');
     },
   };
 };
@@ -42,6 +54,9 @@ const schema: ISchema = {
     [uid()]: {
       'x-decorator': 'Form',
       'x-component': 'Action.Drawer',
+      'x-component-props': {
+        zIndex: 10000,
+      },
       type: 'void',
       title: '{{t("Change password")}}',
       properties: {
@@ -114,23 +129,36 @@ const schema: ISchema = {
   },
 };
 
-export const ChangePassword = () => {
+export const useChangePassword = () => {
+  const ctx = useContext(DropdownVisibleContext);
   const [visible, setVisible] = useState(false);
   const { t } = useTranslation();
-  const ctx = useContext(DropdownVisibleContext);
-  return (
-    <ActionContext.Provider value={{ visible, setVisible }}>
-      <Menu.Item
-        key="password"
-        eventKey={'ChangePassword'}
-        onClick={() => {
-          ctx?.setVisible?.(false);
-          setVisible(true);
-        }}
-      >
-        {t('Change password')}
-      </Menu.Item>
-      <SchemaComponent scope={{ useCloseAction, useSaveCurrentUserValues }} schema={schema} />
-    </ActionContext.Provider>
-  );
+  const { data } = useSystemSettings();
+  const { enableChangePassword } = data?.data || {};
+
+  const result = useMemo<MenuProps['items'][0]>(() => {
+    return {
+      key: 'password',
+      eventKey: 'ChangePassword',
+      onClick: () => {
+        setVisible(true);
+        ctx?.setVisible(false);
+      },
+      label: (
+        <>
+          {t('Change password')}
+          <ActionContextProvider value={{ visible, setVisible }}>
+            <div onClick={(e) => e.stopPropagation()}>
+              <SchemaComponent scope={{ useCloseAction, useSaveCurrentUserValues }} schema={schema} />
+            </div>
+          </ActionContextProvider>
+        </>
+      ),
+    };
+  }, [visible]);
+  if (enableChangePassword === false) {
+    return null;
+  }
+
+  return result;
 };

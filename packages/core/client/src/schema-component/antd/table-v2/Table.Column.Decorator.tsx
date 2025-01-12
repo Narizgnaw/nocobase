@@ -1,34 +1,78 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { useField, useFieldSchema } from '@formily/react';
-import React, { useLayoutEffect } from 'react';
-import { SortableItem, useCollection, useCollectionManager, useCompile, useDesignable, useDesigner } from '../../../';
+import React, { useLayoutEffect, useMemo } from 'react';
+import {
+  CollectionFieldContext,
+  SortableItem,
+  useCollection_deprecated,
+  useCollectionManager_deprecated,
+  useCompile,
+  useDesigner,
+  useFlag,
+} from '../../../';
 import { designerCss } from './Table.Column.ActionBar';
 import { isCollectionFieldComponent } from './utils';
 
 export const useColumnSchema = () => {
-  const { getField } = useCollection();
+  const { getField } = useCollection_deprecated();
   const compile = useCompile();
   const columnSchema = useFieldSchema();
-  const { getCollectionJoinField } = useCollectionManager();
-  const fieldSchema = columnSchema.reduceProperties((buf, s) => {
+  const { getCollectionJoinField } = useCollectionManager_deprecated();
+  const fieldSchema = columnSchema?.reduceProperties((buf, s) => {
     if (isCollectionFieldComponent(s)) {
       return s;
     }
     return buf;
   }, null);
+
   if (!fieldSchema) {
     return {};
   }
 
   const collectionField = getField(fieldSchema.name) || getCollectionJoinField(fieldSchema?.['x-collection-field']);
-  return { columnSchema, fieldSchema, collectionField, uiSchema: compile(collectionField?.uiSchema) };
+
+  return {
+    columnSchema,
+    fieldSchema,
+    collectionField,
+    uiSchema: compile(collectionField?.uiSchema),
+  };
+};
+
+export const useTableFieldInstanceList = () => {
+  const columnField = useField();
+  const { fieldSchema } = useColumnSchema();
+  const filedInstanceList = useMemo(() => {
+    if (!fieldSchema || !columnField) {
+      return [];
+    }
+
+    const path = columnField.path?.splice(columnField.path?.length - 1, 1);
+    // TODO: 这里需要优化，性能比较差，在 M2 pro 的机器上这行代码会运行将近 0.1 毫秒
+    return columnField.form.query(`${path.concat(`*.` + fieldSchema.name)}`).map();
+  }, [columnField, fieldSchema]);
+
+  if (!fieldSchema) {
+    return [];
+  }
+
+  return filedInstanceList;
 };
 
 export const TableColumnDecorator = (props) => {
   const Designer = useDesigner();
   const field = useField();
   const { fieldSchema, uiSchema, collectionField } = useColumnSchema();
-  const { refresh } = useDesignable();
   const compile = useCompile();
+  const { isInSubTable } = useFlag() || {};
   useLayoutEffect(() => {
     if (field.title) {
       return;
@@ -41,22 +85,19 @@ export const TableColumnDecorator = (props) => {
     }
   }, [uiSchema?.title]);
   return (
-    <SortableItem className={designerCss}>
-      <Designer fieldSchema={fieldSchema} uiSchema={uiSchema} collectionField={collectionField} />
-      {/* <RecursionField name={columnSchema.name} schema={columnSchema}/> */}
-      {field?.title || compile(uiSchema?.title)}
-      {/* <div
-        onClick={() => {
-          field.title = uid();
-          // columnSchema.title = field.title = field.title;
-          // refresh();
-          // field.query(`.*.${fieldSchema.name}`).take((f) => {
-          //   f.componentProps.dateFormat = 'YYYY-MM-DD';
-          // });
-        }}
-      >
-        Edit
-      </div> */}
+    <SortableItem
+      className={designerCss({
+        margin: isInSubTable ? '-12px -8px' : '-18px -16px',
+        padding: isInSubTable ? '12px 8px' : '12px 16px',
+      })}
+    >
+      <CollectionFieldContext.Provider value={collectionField}>
+        <Designer fieldSchema={fieldSchema} uiSchema={uiSchema} collectionField={collectionField} />
+        <span role="button">
+          {fieldSchema?.required && <span className="ant-formily-item-asterisk">*</span>}
+          <span>{field?.title || compile(uiSchema?.title)}</span>
+        </span>
+      </CollectionFieldContext.Provider>
     </SortableItem>
   );
 };

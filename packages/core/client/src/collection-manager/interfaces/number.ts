@@ -1,30 +1,37 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { CollectionFieldInterface } from '../../data-source/collection-field-interface/CollectionFieldInterface';
 import { i18n } from '../../i18n';
 import { defaultProps, operators, unique } from './properties';
-import { IField } from './types';
 
-export const number: IField = {
-  name: 'number',
-  type: 'object',
-  group: 'basic',
-  order: 7,
-  title: '{{t("Number")}}',
-  sortable: true,
-  default: {
+export class NumberFieldInterface extends CollectionFieldInterface {
+  name = 'number';
+  type = 'object';
+  group = 'basic';
+  order = 7;
+  title = '{{t("Number")}}';
+  sortable = true;
+  default = {
     type: 'double',
-    // name,
     uiSchema: {
       type: 'number',
-      // title,
       'x-component': 'InputNumber',
       'x-component-props': {
         stringMode: true,
-        step: '0',
+        step: '1',
       },
     },
-  },
-  availableTypes: ['double'],
-  hasDefaultValue: true,
-  properties: {
+  };
+  availableTypes = ['double', 'float', 'decimal'];
+  hasDefaultValue = true;
+  properties = {
     ...defaultProps,
     unique,
     'uiSchema.x-component-props.step': {
@@ -32,20 +39,24 @@ export const number: IField = {
       title: '{{t("Precision")}}',
       'x-component': 'Select',
       'x-decorator': 'FormItem',
-      default: '0',
+      default: '1',
       enum: [
-        { value: '0', label: '1' },
+        { value: '1', label: '1' },
         { value: '0.1', label: '1.0' },
         { value: '0.01', label: '1.00' },
         { value: '0.001', label: '1.000' },
         { value: '0.0001', label: '1.0000' },
         { value: '0.00001', label: '1.00000' },
+        { value: '0.000001', label: '1.000000' },
+        { value: '0.0000001', label: '1.0000000' },
+        { value: '0.00000001', label: '1.00000000' },
       ],
     },
-  },
-  filterable: {
+  };
+  filterable = {
     operators: operators.number,
-  },
+  };
+  titleUsable = true;
   validateSchema(fieldSchema) {
     return {
       maximum: {
@@ -111,5 +122,5 @@ export const number: IField = {
         },
       },
     };
-  },
-};
+  }
+}

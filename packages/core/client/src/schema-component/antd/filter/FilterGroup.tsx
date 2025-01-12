@@ -1,17 +1,29 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { CloseCircleOutlined } from '@ant-design/icons';
 import { ObjectField as ObjectFieldModel } from '@formily/core';
 import { ArrayField, connect, useField } from '@formily/react';
 import { Select, Space } from 'antd';
 import React, { useContext } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { FilterLogicContext, RemoveConditionContext } from './context';
+import { useToken } from '../__builtins__';
 import { FilterItems } from './FilterItems';
+import { FilterLogicContext, RemoveConditionContext } from './context';
 
 export const FilterGroup = connect((props) => {
   const { bordered = true, disabled } = props;
   const field = useField<ObjectFieldModel>();
   const remove = useContext(RemoveConditionContext);
   const { t } = useTranslation();
+  const { token } = useToken();
+
   const keys = Object.keys(field.value || {});
   const logic = keys.includes('$or') ? '$or' : '$and';
   const setLogic = (value) => {
@@ -28,18 +40,18 @@ export const FilterGroup = connect((props) => {
           bordered
             ? {
                 position: 'relative',
-                border: '1px dashed #dedede',
-                padding: 14,
-                marginBottom: 8,
+                border: `1px dashed ${token.colorBorder}`,
+                padding: token.paddingSM,
+                marginBottom: token.marginXS,
               }
             : {
                 position: 'relative',
-                marginBottom: 8,
+                marginBottom: token.marginXS,
               }
         }
       >
         {remove && !mergedDisabled && (
-          <a>
+          <a role="button" aria-label="icon-close">
             <CloseCircleOutlined
               style={{
                 position: 'absolute',
@@ -51,10 +63,13 @@ export const FilterGroup = connect((props) => {
             />
           </a>
         )}
-        <div style={{ marginBottom: 8 }}>
+        <div style={{ marginBottom: 8, color: token.colorText }}>
           <Trans>
             {'Meet '}
             <Select
+              // @ts-ignore
+              role="button"
+              data-testid="filter-select-all-or-any"
               style={{ width: 'auto' }}
               value={logic}
               onChange={(value) => {
@@ -78,6 +93,9 @@ export const FilterGroup = connect((props) => {
                 const items = value[logic] || [];
                 items.push({});
                 field.value = {
+                  [logic]: items,
+                };
+                field.initialValue = {
                   [logic]: items,
                 };
               }}

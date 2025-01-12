@@ -1,6 +1,15 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { Mutex } from 'async-mutex';
 import { isNumber } from 'lodash';
-import { DataTypes } from 'sequelize';
+import { DataTypes, Sequelize } from 'sequelize';
 import { BaseColumnFieldOptions, Field } from './field';
 
 const sortFieldMutex = new Mutex();
@@ -41,12 +50,15 @@ export class SortField extends Field {
     }
   };
 
-  initRecordsSortValue = async ({ transaction }) => {
+  initRecordsSortValue = async (options) => {
+    const { transaction } = options;
     const orderField = (() => {
       const model = this.collection.model;
+
       if (model.primaryKeyAttribute) {
         return model.primaryKeyAttribute;
       }
+
       if (model.rawAttributes['createdAt']) {
         return model.rawAttributes['createdAt'].field;
       }
@@ -79,57 +91,92 @@ export class SortField extends Field {
     const doInit = async (scopeKey = null, scopeValue = null) => {
       const queryInterface = this.collection.db.sequelize.getQueryInterface();
 
-      const quotedOrderField = queryInterface.quoteIdentifier(orderField);
+      if (scopeKey) {
+        const scopeAttribute = this.collection.model.rawAttributes[scopeKey];
 
-      const sql = `
-        WITH ordered_table AS (
-          SELECT *, ROW_NUMBER() OVER (${
-            scopeKey ? `PARTITION BY ${queryInterface.quoteIdentifier(scopeKey)}` : ''
-          } ORDER BY ${quotedOrderField}) AS new_sequence_number
-          FROM ${this.collection.quotedTableName()}
-          ${(() => {
-            if (scopeKey && scopeValue) {
-              const hasNull = scopeValue.includes(null);
-
-              return `WHERE ${queryInterface.quoteIdentifier(scopeKey)} IN (${scopeValue
-                .filter((v) => v !== null)
-                .map((v) => `'${v}'`)
-                .join(',')}) ${hasNull ? `OR ${queryInterface.quoteIdentifier(scopeKey)} IS NULL` : ''} `;
-            }
-
-            return '';
-          })()}
-
-        )
-        ${
-          this.collection.db.inDialect('mysql')
-            ? `
-             UPDATE ${this.collection.quotedTableName()}, ordered_table
-             SET ${this.collection.quotedTableName()}.${this.name} = ordered_table.new_sequence_number
-             WHERE ${this.collection.quotedTableName()}.${quotedOrderField} = ordered_table.${quotedOrderField}
-            `
-            : `
-          UPDATE ${this.collection.quotedTableName()}
-        SET ${queryInterface.quoteIdentifier(this.name)} = ordered_table.new_sequence_number
-        FROM ordered_table
-        WHERE ${this.collection.quotedTableName()}.${quotedOrderField} = ${queryInterface.quoteIdentifier(
-                'ordered_table',
-              )}.${quotedOrderField};
-        `
+        if (!scopeAttribute) {
+          throw new Error(`can not find scope field ${scopeKey} for collection ${this.collection.name}`);
         }
 
-      `;
+        scopeKey = scopeAttribute.field;
+      }
 
+      const quotedOrderField = queryInterface.quoteIdentifier(orderField);
+
+      const sortColumnName = queryInterface.quoteIdentifier(this.collection.model.rawAttributes[this.name].field);
+
+      let sql: string;
+
+      const whereClause =
+        scopeKey && scopeValue
+          ? (() => {
+              const filteredScopeValue = scopeValue.filter((v) => v !== null);
+              if (filteredScopeValue.length === 0) {
+                return '';
+              }
+              const initialClause = `
+  WHERE ${queryInterface.quoteIdentifier(scopeKey)} IN (${filteredScopeValue.map((v) => `'${v}'`).join(', ')})`;
+
+              const nullCheck = scopeValue.includes(null)
+                ? ` OR ${queryInterface.quoteIdentifier(scopeKey)} IS NULL`
+                : '';
+              return initialClause + nullCheck;
+            })()
+          : '';
+
+      if (this.collection.db.inDialect('postgres')) {
+        sql = `
+    UPDATE ${this.collection.quotedTableName()}
+    SET ${sortColumnName} = ordered_table.new_sequence_number
+    FROM (
+      SELECT *, ROW_NUMBER() OVER (${
+        scopeKey ? `PARTITION BY ${queryInterface.quoteIdentifier(scopeKey)}` : ''
+      } ORDER BY ${quotedOrderField}) AS new_sequence_number
+      FROM ${this.collection.quotedTableName()}
+      ${whereClause}
+    ) AS ordered_table
+    WHERE ${this.collection.quotedTableName()}.${quotedOrderField} = ordered_table.${quotedOrderField};
+  `;
+      } else if (this.collection.db.inDialect('sqlite')) {
+        sql = `
+    UPDATE ${this.collection.quotedTableName()}
+    SET ${sortColumnName} = (
+      SELECT new_sequence_number
+      FROM (
+        SELECT *, ROW_NUMBER() OVER (${
+          scopeKey ? `PARTITION BY ${queryInterface.quoteIdentifier(scopeKey)}` : ''
+        } ORDER BY ${quotedOrderField}) AS new_sequence_number
+        FROM ${this.collection.quotedTableName()}
+        ${whereClause}
+      ) AS ordered_table
+      WHERE ${this.collection.quotedTableName()}.${quotedOrderField} = ordered_table.${quotedOrderField}
+    );
+  `;
+      } else if (this.collection.db.inDialect('mysql') || this.collection.db.inDialect('mariadb')) {
+        sql = `
+    UPDATE ${this.collection.quotedTableName()}
+    JOIN (
+      SELECT *, ROW_NUMBER() OVER (${
+        scopeKey ? `PARTITION BY ${queryInterface.quoteIdentifier(scopeKey)}` : ''
+      } ORDER BY ${quotedOrderField}) AS new_sequence_number
+      FROM ${this.collection.quotedTableName()}
+      ${whereClause}
+    ) AS ordered_table ON ${this.collection.quotedTableName()}.${quotedOrderField} = ordered_table.${quotedOrderField}
+    SET ${this.collection.quotedTableName()}.${sortColumnName} = ordered_table.new_sequence_number;
+  `;
+      }
       await this.collection.db.sequelize.query(sql, {
         transaction,
       });
     };
 
     const scopeKey = this.options.scopeKey;
+
     if (scopeKey) {
-      const groups = await this.collection.repository.find({
-        attributes: [scopeKey],
-        group: [scopeKey],
+      const scopeKeyColumn = this.collection.model.rawAttributes[scopeKey].field;
+
+      const groups = await this.collection.model.findAll({
+        attributes: [[Sequelize.fn('DISTINCT', Sequelize.col(scopeKeyColumn)), scopeKey]],
         raw: true,
         transaction,
       });

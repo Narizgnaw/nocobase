@@ -1,33 +1,12 @@
-import { TableOutlined } from '@ant-design/icons';
-import React, { useContext } from 'react';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
 
-import { SchemaInitializer, SchemaInitializerButtonContext } from '..';
-import { useSchemaTemplateManager } from '../../schema-templates';
-import { useCollectionDataSourceItems } from '../utils';
+import { DataBlockInitializer } from './DataBlockInitializer';
 
-export const FilterBlockInitializer = (props) => {
-  const { templateWrap, onCreateBlockSchema, componentType, createBlockSchema, insert, ...others } = props;
-  const { getTemplateSchemaByMode } = useSchemaTemplateManager();
-  const { setVisible } = useContext(SchemaInitializerButtonContext);
-
-  return (
-    <SchemaInitializer.Item
-      icon={<TableOutlined />}
-      {...others}
-      onClick={async ({ item }) => {
-        if (item.template) {
-          const s = await getTemplateSchemaByMode(item);
-          templateWrap ? insert(templateWrap(s, { item })) : insert(s);
-        } else {
-          if (onCreateBlockSchema) {
-            onCreateBlockSchema({ item });
-          } else if (createBlockSchema) {
-            insert(createBlockSchema({ collection: item.name }));
-          }
-        }
-        setVisible(false);
-      }}
-      items={useCollectionDataSourceItems(componentType)}
-    />
-  );
-};
+export const FilterBlockInitializer = DataBlockInitializer;

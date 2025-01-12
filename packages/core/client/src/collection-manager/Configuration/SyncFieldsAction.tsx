@@ -1,22 +1,31 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { PlusOutlined } from '@ant-design/icons';
-import { ArrayTable } from '@formily/antd';
-import { useForm, useField } from '@formily/react';
+import { ArrayTable } from '@formily/antd-v5';
+import { useField, useForm } from '@formily/react';
 import { uid } from '@formily/shared';
 import { Button } from 'antd';
-import { cloneDeep } from 'lodash';
+import { cloneDeep, omit } from 'lodash';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useRequest } from '../../api-client';
+import { useParams } from 'react-router-dom';
+import { useAPIClient, useRequest } from '../../api-client';
 import { RecordProvider, useRecord } from '../../record-provider';
-import { ActionContext, SchemaComponent, useActionContext, useCompile } from '../../schema-component';
-import { useCancelAction } from '../action-hooks';
-import { useCollectionManager } from '../hooks';
-import { IField } from '../interfaces/types';
+import { ActionContextProvider, SchemaComponent, useActionContext, useCompile } from '../../schema-component';
 import { useResourceActionContext, useResourceContext } from '../ResourceActionProvider';
-import * as components from './components';
-import { useAPIClient } from '../../api-client';
+import { useCancelAction } from '../action-hooks';
+import { useCollectionManager_deprecated } from '../hooks';
+import { IField } from '../interfaces/types';
 import { PreviewFields } from '../templates/components/PreviewFields';
 import { PreviewTable } from '../templates/components/PreviewTable';
+import * as components from './components';
 
 const getSchema = (schema: IField, record: any, compile) => {
   if (!schema) {
@@ -124,7 +133,7 @@ const getSchema = (schema: IField, record: any, compile) => {
 
 const useSyncFromDatabase = () => {
   const form = useForm();
-  const { refreshCM } = useCollectionManager();
+  const { refreshCM } = useCollectionManager_deprecated();
   const ctx = useActionContext();
   const { refresh } = useResourceActionContext();
   const { targetKey } = useResourceContext();
@@ -139,7 +148,7 @@ const useSyncFromDatabase = () => {
       try {
         await api.resource(`collections`).setFields({
           filterByTk,
-          values: form.values,
+          values: omit(form.values, 'preview'),
         });
         ctx.setVisible(false);
         await form.reset();
@@ -164,10 +173,13 @@ export const SyncFieldsActionCom = (props) => {
   const [schema, setSchema] = useState({});
   const compile = useCompile();
   const { t } = useTranslation();
+  const { name = 'main' } = useParams();
+
   return (
-    record.template === 'view' && (
+    record.template === 'view' &&
+    name === 'main' && (
       <RecordProvider record={record}>
-        <ActionContext.Provider value={{ visible, setVisible }}>
+        <ActionContextProvider value={{ visible, setVisible, drawerProps: { width: 900 } }}>
           {children || (
             <Button
               icon={<PlusOutlined />}
@@ -195,7 +207,7 @@ export const SyncFieldsActionCom = (props) => {
               ...scope,
             }}
           />
-        </ActionContext.Provider>
+        </ActionContextProvider>
       </RecordProvider>
     )
   );

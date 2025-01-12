@@ -1,28 +1,46 @@
-import { ISchema } from '@formily/react';
-import { defaultProps } from './properties';
-import { IField } from './types';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
 
-export const url: IField = {
-  name: 'url',
-  type: 'string',
-  group: 'basic',
-  order: 5,
-  title: '{{t("URL")}}',
-  default: {
-    type: 'string',
+import { ISchema } from '@formily/react';
+import { defaultProps, operators } from './properties';
+import { CollectionFieldInterface } from '../../data-source/collection-field-interface/CollectionFieldInterface';
+
+export class UrlFieldInterface extends CollectionFieldInterface {
+  name = 'url';
+  type = 'string';
+  group = 'basic';
+  order = 5;
+  title = '{{t("URL")}}';
+  default = {
+    type: 'text',
     uiSchema: {
       type: 'string',
-      title: '{{t("URL")}}',
       'x-component': 'Input.URL',
     },
-  },
-  schemaInitialize(schema: ISchema, { block }) {
-    if (['Table', 'Kanban'].includes(block)) {
-      schema['x-component-props'] = schema['x-component-props'] || {};
-      schema['x-component-props']['size'] = 'small';
-    }
-  },
-  properties: {
+  };
+  componentOptions = [
+    {
+      label: 'URL',
+      value: 'Input.URL',
+    },
+    {
+      label: 'Preview',
+      value: 'Input.Preview',
+    },
+  ];
+  availableTypes = ['string', 'text'];
+  schemaInitialize(schema: ISchema, { block }) {}
+  properties = {
     ...defaultProps,
-  },
-};
+  };
+  titleUsable = true;
+  filterable = {
+    operators: operators.string,
+  };
+}

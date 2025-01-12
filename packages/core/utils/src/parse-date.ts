@@ -1,7 +1,17 @@
-import moment from 'moment';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { offsetFromString } from './date';
+import { dayjs } from './dayjs';
 
 function parseUTC(value) {
-  if (moment.isDate(value) || moment.isMoment(value)) {
+  if (value instanceof Date || dayjs.isDayjs(value)) {
     return {
       unit: 'utc',
       start: value.toISOString(),
@@ -25,25 +35,46 @@ function parseYear(value) {
 }
 
 function parseQuarter(value) {
-  if (/^\d\d\d\d\Q\d$/.test(value)) {
+  if (/^\d\d\d\dQ\d$/.test(value)) {
+    const [year, q] = value.split('Q');
     return {
       unit: 'quarter',
-      start: moment(value, 'YYYY[Q]Q').format('YYYY-MM-DD HH:mm:ss'),
+      start: dayjs(year, 'YYYY').quarter(q).format('YYYY-MM-DD HH:mm:ss'),
     };
   }
 }
 
-function parseWeek(value) {
+export function parseWeek(value) {
   if (/^\d\d\d\d[W]\d\d$/.test(value)) {
+    const arr = value.split('W');
+    const year = dayjs(arr[0], 'YYYY').format('GGGG');
+    if (year !== arr[0]) {
+      return {
+        unit: 'isoWeek',
+        start: dayjs(arr[0], 'YYYY')
+          .add(1, 'week')
+          .startOf('isoWeek')
+          .isoWeek(Number(arr[1]))
+          .format('YYYY-MM-DD HH:mm:ss'),
+      };
+    }
     return {
       unit: 'isoWeek',
-      start: moment(value, 'GGGG[W]W').format('YYYY-MM-DD HH:mm:ss'),
+      start: dayjs(arr[0], 'YYYY').isoWeek(Number(arr[1])).format('YYYY-MM-DD HH:mm:ss'),
     };
   }
   if (/^\d\d\d\d[w]\d\d$/.test(value)) {
+    const arr = value.split('w');
+    const year = dayjs(arr[0], 'YYYY').format('gggg');
+    if (year !== arr[0]) {
+      return {
+        unit: 'week',
+        start: dayjs(arr[0], 'YYYY').add(1, 'week').startOf('week').week(Number(arr[1])).format('YYYY-MM-DD HH:mm:ss'),
+      };
+    }
     return {
       unit: 'week',
-      start: moment(value, 'gggg[w]w').format('YYYY-MM-DD HH:mm:ss'),
+      start: dayjs(arr[0], 'YYYY').week(Number(arr[1])).format('YYYY-MM-DD HH:mm:ss'),
     };
   }
 }
@@ -121,7 +152,7 @@ type ParseDateResult = {
   timezone?: string;
 };
 
-function toISOString(m: moment.Moment) {
+function toISOString(m: dayjs.Dayjs) {
   return m.toISOString();
 }
 
@@ -129,24 +160,27 @@ function dateRange(r: ParseDateResult) {
   if (!r.timezone) {
     r.timezone = '+00:00';
   }
-  let m: moment.Moment;
+  let m: dayjs.Dayjs;
   if (r.unit === 'utc') {
-    return moment(r?.start).toISOString();
+    return dayjs(r?.start).toISOString();
   } else {
-    m = moment(`${r?.start}${r?.timezone}`);
+    m = dayjs(`${r?.start}${r?.timezone}`);
   }
-  m = m.utcOffset(r.timezone);
-  return [m.startOf(r.unit), m.clone().add(1, r.unit).startOf(r.unit)].map(toISOString);
+  m = m.utcOffset(offsetFromString(r.timezone));
+  return [(m = m.startOf(r.unit)), m.add(1, r.unit === 'isoWeek' ? 'weeks' : r.unit).startOf(r.unit)].map(toISOString);
 }
 
 export function parseDate(value: any, options = {} as { timezone?: string }) {
   if (!value) {
     return;
   }
+
   if (Array.isArray(value)) {
     return parseDateBetween(value, options);
   }
+
   let timezone = options.timezone || '+00:00';
+
   const input = value;
   if (typeof value === 'string') {
     const match = /(.+)((\+|\-)\d\d\:\d\d)$/.exec(value);
@@ -201,10 +235,12 @@ function parseDateBetween(value: any, options = {} as { timezone?: string }) {
   }
   const match = /(.+)((\+|\-)\d\d\:\d\d)$/.exec(value);
   let timezone = options.timezone || '+00:00';
+
   if (match) {
     value = match[1];
     timezone = match[2];
   }
+
   const m = /^(\(|\[)(.+)\,(.+)(\)|\])$/.exec(value);
   if (!m) {
     return;

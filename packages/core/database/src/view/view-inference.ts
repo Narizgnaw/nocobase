@@ -1,6 +1,15 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { isArray } from 'mathjs';
 import Database from '../database';
 import FieldTypeMap from './field-type-map';
-import { isArray } from 'mathjs';
 
 type InferredField = {
   name: string;
@@ -13,6 +22,16 @@ type InferredFieldResult = {
 };
 
 export class ViewFieldInference {
+  static extractTypeFromDefinition(typeDefinition) {
+    const leftParenIndex = typeDefinition.indexOf('(');
+
+    if (leftParenIndex === -1) {
+      return typeDefinition.toLowerCase();
+    }
+
+    return typeDefinition.substring(0, leftParenIndex).toLowerCase().trim();
+  }
+
   static async inferFields(options: {
     db: Database;
     viewName: string;
@@ -30,57 +49,96 @@ export class ViewFieldInference {
       schema: options.viewSchema,
     });
 
-    // @ts-ignore
-    return Object.fromEntries(
-      Object.entries(columns).map(([name, column]) => {
-        const usage = columnUsage[name];
+    const rawFields = [];
 
-        if (usage) {
-          const collectionField = (() => {
-            const tableName = `${usage.table_schema ? `${usage.table_schema}.` : ''}${usage.table_name}`;
-            const collection = db.tableNameCollectionMap.get(tableName);
-            if (!collection) return false;
+    for (const [name, column] of Object.entries(columns)) {
+      const inferResult: any = { name, rawType: column.type, field: name };
 
-            const fieldValue = Object.values(collection.model.rawAttributes).find(
-              (field) => field.field === usage.column_name,
-            );
+      const usage = columnUsage[name];
 
-            if (!fieldValue) {
-              return false;
-            }
+      if (usage) {
+        const collection = db.tableNameCollectionMap.get(
+          `${usage.table_schema ? `${usage.table_schema}.` : ''}${usage.table_name}`,
+        );
 
-            // @ts-ignore
-            const fieldName = fieldValue?.fieldName;
+        const collectionField = (() => {
+          if (!collection) return false;
 
-            return collection.getField(fieldName);
-          })();
+          const fieldAttribute = Object.values(collection.model.rawAttributes).find(
+            (field) => field.field === usage.column_name,
+          );
 
-          if (collectionField && collectionField.options.interface) {
-            return [
-              name,
-              {
-                name,
-                type: collectionField.type,
-                source: `${collectionField.collection.name}.${collectionField.name}`,
-              },
-            ];
+          if (!fieldAttribute) {
+            return false;
           }
+
+          // @ts-ignore
+          const fieldName = fieldAttribute.fieldName;
+
+          return collection.getField(fieldName);
+        })();
+
+        const belongsToAssociationField = (() => {
+          if (!collection) return false;
+
+          const field = Object.values(collection.model.rawAttributes).find(
+            (field) => field.field === usage.column_name,
+          );
+
+          if (!field) {
+            return false;
+          }
+
+          const association = Object.values(collection.model.associations).find(
+            (association) =>
+              association.associationType === 'BelongsTo' && association.foreignKey === (field as any).fieldName,
+          );
+
+          if (!association) {
+            return false;
+          }
+
+          return collection.getField(association.as);
+        })();
+
+        if (belongsToAssociationField) {
+          rawFields.push([
+            belongsToAssociationField.name,
+            {
+              name: belongsToAssociationField.name,
+              type: belongsToAssociationField.type,
+              source: `${belongsToAssociationField.collection.name}.${belongsToAssociationField.name}`,
+            },
+          ]);
         }
 
-        return [
-          name,
-          {
+        if (collectionField) {
+          if (collectionField.options.interface) {
+            inferResult.type = collectionField.type;
+            inferResult.source = `${collectionField.collection.name}.${collectionField.name}`;
+          }
+        }
+      }
+
+      if (!inferResult.type) {
+        Object.assign(
+          inferResult,
+          this.inferToFieldType({
+            dialect: db.sequelize.getDialect(),
             name,
-            ...this.inferToFieldType({ db, name, type: column.type }),
-          },
-        ];
-      }),
-    );
+            type: column.type,
+          }),
+        );
+      }
+
+      rawFields.push([name, inferResult]);
+    }
+
+    return Object.fromEntries(rawFields);
   }
 
-  static inferToFieldType(options: { db: Database; name: string; type: string }) {
-    const { db } = options;
-    const dialect = db.sequelize.getDialect();
+  static inferToFieldType(options: { name: string; type: string; dialect: string }) {
+    const { dialect } = options;
     const fieldTypeMap = FieldTypeMap[dialect];
 
     if (!options.type) {
@@ -89,7 +147,7 @@ export class ViewFieldInference {
       };
     }
 
-    const queryType = options.type.toLowerCase().replace(/\(\d+\)/, '');
+    const queryType = this.extractTypeFromDefinition(options.type);
     const mappedType = fieldTypeMap[queryType];
 
     if (isArray(mappedType)) {

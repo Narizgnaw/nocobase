@@ -1,14 +1,17 @@
-import { FormItem, Input } from '@formily/antd';
 import { ISchema, observer, useForm } from '@formily/react';
 import {
   Action,
-  ActionContext,
+  ActionContextProvider,
+  CustomRouterContextProvider,
   Form,
+  FormItem,
+  Input,
   SchemaComponent,
   SchemaComponentProvider,
   useActionContext,
 } from '@nocobase/client';
 import React, { useState } from 'react';
+import { Router } from 'react-router-dom';
 
 const useCloseAction = () => {
   const { setVisible } = useActionContext();
@@ -56,11 +59,15 @@ const schema: ISchema = {
 export default observer(() => {
   const [visible, setVisible] = useState(false);
   return (
-    <SchemaComponentProvider components={{ Form, Action, Input, FormItem }}>
-      <ActionContext.Provider value={{ visible, setVisible }}>
-        <a onClick={() => setVisible(true)}>Open</a>
-        <SchemaComponent scope={{ useCloseAction }} schema={schema} />
-      </ActionContext.Provider>
-    </SchemaComponentProvider>
+    <Router location={window.location} navigator={null}>
+      <CustomRouterContextProvider>
+        <SchemaComponentProvider components={{ Form, Action, Input, FormItem }}>
+          <ActionContextProvider value={{ visible, setVisible }}>
+            <a onClick={() => setVisible(true)}>Open</a>
+            <SchemaComponent scope={{ useCloseAction }} schema={schema} />
+          </ActionContextProvider>
+        </SchemaComponentProvider>
+      </CustomRouterContextProvider>
+    </Router>
   );
 });

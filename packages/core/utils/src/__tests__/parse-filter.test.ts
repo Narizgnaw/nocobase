@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { getDateVars, getDayRange, parseFilter, utc2unit, Utc2unitOptions } from '../parse-filter';
 
 describe('utc to unit', () => {
@@ -95,6 +104,16 @@ describe('utc to unit', () => {
       now: '2023-01-01T00:00:00.000Z',
       unit: 'isoWeek',
     }).toBe('2022W52+00:00');
+    expectUtc2unit({
+      now: '2024-04-17T03:06:46.754Z',
+      unit: 'isoWeek',
+      offset: 1,
+    }).toBe('2024W17+00:00');
+    expectUtc2unit({
+      now: '2024-04-17T03:06:46.754Z',
+      unit: 'isoWeek',
+      offset: -1,
+    }).toBe('2024W15+00:00');
   });
   it('should be day', async () => {
     expectUtc2unit({
@@ -287,6 +306,24 @@ describe('parseFilter', () => {
         },
       },
     ).toEqual({ createdAt: { $eq: date } });
+  });
+
+  test('$user & array', async () => {
+    const date = new Date();
+    await expectParseFilter(
+      {
+        'roles.name.$eq': '{{$user.roles.name}}',
+      },
+      {
+        vars: {
+          $user: async (fields) => {
+            return {
+              roles: [{ name: 'admin' }, { name: 'user' }],
+            };
+          },
+        },
+      },
+    ).toEqual({ roles: { name: { $eq: ['admin', 'user'] } } });
   });
 
   test('$dateOn', async () => {

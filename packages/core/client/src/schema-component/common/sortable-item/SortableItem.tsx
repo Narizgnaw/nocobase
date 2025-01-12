@@ -1,9 +1,23 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { TinyColor } from '@ctrl/tinycolor';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { observer, useField, useFieldSchema } from '@formily/react';
-import React, { createContext, useContext } from 'react';
+import { cx } from '@emotion/css';
+import { Schema, observer, useField, useFieldSchema } from '@formily/react';
+import React, { HTMLAttributes, createContext, useContext, useMemo } from 'react';
+import { useToken } from '../../antd/__builtins__';
 
 export const DraggableContext = createContext(null);
+DraggableContext.displayName = 'DraggableContext';
 export const SortableContext = createContext(null);
+SortableContext.displayName = 'SortableContext';
 
 export const SortableProvider = (props) => {
   const { id, data, children } = props;
@@ -19,18 +33,25 @@ export const SortableProvider = (props) => {
 };
 
 export const Sortable = (props: any) => {
-  const { component, style, children, openMode, ...others } = props;
-  const { droppable } = useContext(SortableContext);
+  const { component, overStyle, style, children, openMode, ...others } = props;
+  const { token } = useToken();
+  const { draggable, droppable } = useContext(SortableContext);
   const { isOver, setNodeRef } = droppable;
   const droppableStyle = { ...style };
 
-  if (isOver) {
-    droppableStyle['color'] = 'rgba(241, 139, 98, .1)';
+  if (isOver && draggable?.active?.id !== droppable?.over?.id) {
+    droppableStyle[component === 'a' ? 'color' : 'background'] = new TinyColor(token.colorSettings)
+      .setAlpha(0.15)
+      .toHex8String();
+    Object.assign(droppableStyle, overStyle);
   }
+
   return React.createElement(
     component || 'div',
     {
+      role: 'none',
       ...others,
+      className: cx('nb-sortable-designer', props.className),
       ref: setNodeRef,
       style: droppableStyle,
     },
@@ -40,47 +61,61 @@ export const Sortable = (props: any) => {
 
 const useSortableItemProps = (props) => {
   const id = useSortableItemId(props);
+  const schema = useFieldSchema();
   if (props.schema) {
     return { ...props, id };
   }
-  const schema = useFieldSchema();
   return { ...props, id, schema };
 };
 
 const useSortableItemId = (props) => {
+  const field = useField();
   if (props.id) {
     return props.id;
   }
-  const field = useField();
   return field.address.toString();
 };
 
-export const SortableItem: React.FC<any> = observer((props) => {
-  const { schema, id, ...others } = useSortableItemProps(props);
-  const removeParentsIfNoChildren = others.removeParentsIfNoChildren ?? true;
-  return (
-    <SortableProvider id={id} data={{ insertAdjacent: 'afterEnd', schema: schema, removeParentsIfNoChildren }}>
-      <Sortable {...others}>{props.children}</Sortable>
-    </SortableProvider>
-  );
-});
+interface SortableItemProps extends HTMLAttributes<HTMLDivElement> {
+  eid?: string;
+  schema?: Schema;
+  removeParentsIfNoChildren?: boolean;
+}
+
+export const SortableItem: React.FC<SortableItemProps> = observer(
+  (props) => {
+    const { schema, id, eid, removeParentsIfNoChildren, ...others } = useSortableItemProps(props);
+
+    const data = useMemo(() => {
+      return {
+        insertAdjacent: 'afterEnd',
+        schema: schema,
+        removeParentsIfNoChildren: removeParentsIfNoChildren ?? true,
+      };
+    }, [schema, removeParentsIfNoChildren]);
+
+    return (
+      <SortableProvider id={id} data={data}>
+        <Sortable id={eid} {...others}>
+          {props.children}
+        </Sortable>
+      </SortableProvider>
+    );
+  },
+  { displayName: 'SortableItem' },
+);
 
 export const DragHandler = (props) => {
   const { draggable } = useContext(SortableContext);
-  const { isDragging, attributes, listeners, setNodeRef, transform } = draggable;
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
+  const { attributes, listeners, setNodeRef } = draggable;
 
   return (
     <div
       style={{
         display: 'inline-block',
-        width: 12,
-        height: 12,
-        lineHeight: '12px',
+        width: 14,
+        height: 14,
+        lineHeight: '14px',
         textAlign: 'left',
       }}
     >
@@ -92,13 +127,12 @@ export const DragHandler = (props) => {
           zIndex: 1,
           // backgroundColor: '#333',
           lineHeight: 0,
-          height: 2,
-          width: 2,
           fontSize: 0,
           display: 'inline-block',
         }}
         {...listeners}
         {...attributes}
+        role="none"
       >
         <span style={{ cursor: 'move', fontSize: 14 }}>{props.children}</span>
       </div>

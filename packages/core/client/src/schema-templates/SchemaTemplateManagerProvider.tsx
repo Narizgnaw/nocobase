@@ -1,39 +1,32 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ISchema, useFieldSchema } from '@formily/react';
 import { uid } from '@formily/shared';
-import { Spin } from 'antd';
 import { cloneDeep } from 'lodash';
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { ReactNode, createContext, useContext, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAPIClient, useRequest } from '../api-client';
-import { RouteSwitchContext } from '../route-switch';
-import { SchemaComponentOptions } from '../schema-component';
+import { Plugin } from '../application/Plugin';
+import { useAppSpin } from '../application/hooks/useAppSpin';
+import { useCollectionManager_deprecated } from '../collection-manager';
 import { BlockTemplate } from './BlockTemplate';
+import { DEFAULT_DATA_SOURCE_KEY } from '../data-source';
 
 export const SchemaTemplateManagerContext = createContext<any>({});
-
-const SchemaTemplateRouteProvider = (props) => {
-  const { routes, ...others } = useContext(RouteSwitchContext);
-  routes[1].routes.unshift(
-    {
-      type: 'route',
-      path: '/admin/plugins/block-templates/:key',
-      component: 'BlockTemplateDetails',
-    },
-    {
-      type: 'route',
-      path: '/admin/plugins/block-templates',
-      component: 'BlockTemplatePage',
-    },
-  );
-  return <RouteSwitchContext.Provider value={{ ...others, routes }}>{props.children}</RouteSwitchContext.Provider>;
-};
+SchemaTemplateManagerContext.displayName = 'SchemaTemplateManagerContext';
 
 export const SchemaTemplateManagerProvider: React.FC<any> = (props) => {
   const { templates, refresh } = props;
   return (
     <SchemaTemplateManagerContext.Provider value={{ templates, refresh }}>
-      <SchemaTemplateRouteProvider>
-        <SchemaComponentOptions components={{ BlockTemplate }}>{props.children}</SchemaComponentOptions>
-      </SchemaTemplateRouteProvider>
+      {props.children}
     </SchemaTemplateManagerContext.Provider>
   );
 };
@@ -55,6 +48,7 @@ export const useSchemaTemplate = () => {
 };
 
 export const useSchemaTemplateManager = () => {
+  const { getInheritCollections } = useCollectionManager_deprecated();
   const { refresh, templates = [] } = useContext(SchemaTemplateManagerContext);
   const api = useAPIClient();
   return {
@@ -101,6 +95,7 @@ export const useSchemaTemplateManager = () => {
       return { key };
     },
     getTemplateBySchema(schema) {
+      if (!schema) return;
       const templateKey = schema['x-template-key'];
       if (templateKey) {
         return templates?.find((template) => template.key === templateKey);
@@ -119,26 +114,40 @@ export const useSchemaTemplateManager = () => {
     getTemplateById(key) {
       return templates?.find((template) => template.key === key);
     },
-    getTemplatesByCollection(collectionName: string, resourceName: string = null) {
-      const items = templates?.filter?.((template) => template.collectionName === collectionName);
+    getTemplatesByCollection(dataSource: string, collectionName: string) {
+      const parentCollections = getInheritCollections(collectionName, dataSource);
+      const totalCollections = parentCollections.concat([collectionName]);
+      const items = templates?.filter?.(
+        (template) =>
+          (template.dataSourceKey || DEFAULT_DATA_SOURCE_KEY) === dataSource &&
+          totalCollections.includes(template.collectionName),
+      );
+      return items || [];
+    },
+    getTemplatesByComponentName(componentName: string): Array<any> {
+      const items = templates?.filter?.((template) => template.componentName === componentName);
       return items || [];
     },
   };
 };
 
-export const RemoteSchemaTemplateManagerProvider: React.FC = (props) => {
+export const RemoteSchemaTemplateManagerProvider = (props) => {
   const api = useAPIClient();
+  const { render } = useAppSpin();
   const options = {
     resource: 'uiSchemaTemplates',
     action: 'list',
     params: {
-      appends: ['collection'],
+      // appends: ['collection'],
       paginate: false,
     },
   };
-  const service = useRequest(options);
+
+  const service = useRequest<{
+    data: any[];
+  }>(options);
   if (service.loading) {
-    return <Spin />;
+    return render();
   }
   return (
     <SchemaTemplateManagerProvider
@@ -152,3 +161,23 @@ export const RemoteSchemaTemplateManagerProvider: React.FC = (props) => {
     </SchemaTemplateManagerProvider>
   );
 };
+
+export class RemoteSchemaTemplateManagerPlugin extends Plugin {
+  async load() {
+    this.addRoutes();
+    this.addComponents();
+  }
+
+  addComponents() {
+    this.app.addComponents({
+      BlockTemplate,
+    });
+  }
+
+  addRoutes() {
+    this.app.router.add('admin.plugins.block-templates-key', {
+      path: '/admin/plugins/block-templates/:key',
+      Component: 'BlockTemplateDetails',
+    });
+  }
+}

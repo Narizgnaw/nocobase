@@ -1,9 +1,19 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { Checkbox, message, Table } from 'antd';
 import { uniq } from 'lodash';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAPIClient, useRequest } from '../../api-client';
 import { useRecord } from '../../record-provider';
+import { useStyles } from '../style';
 import { useMenuItems } from './MenuItemsProvider';
 
 const findUids = (items) => {
@@ -39,6 +49,7 @@ const getChildrenUids = (data = [], arr = []) => {
 };
 
 export const MenuConfigure = () => {
+  const { styles } = useStyles();
   const record = useRecord();
   const api = useAPIClient();
   const { items } = useMenuItems();
@@ -84,8 +95,27 @@ export const MenuConfigure = () => {
     }
     message.success(t('Saved successfully'));
   };
+
+  const translateTitle = (menus: any[]) => {
+    return menus.map((menu) => {
+      const title = t(menu.title);
+      if (menu.children) {
+        return {
+          ...menu,
+          title,
+          children: translateTitle(menu.children),
+        };
+      }
+      return {
+        ...menu,
+        title,
+      };
+    });
+  };
+
   return (
     <Table
+      className={styles}
       loading={loading}
       rowKey={'uid'}
       pagination={false}
@@ -126,7 +156,7 @@ export const MenuConfigure = () => {
           },
         },
       ]}
-      dataSource={items}
+      dataSource={translateTitle(items)}
     />
   );
 };

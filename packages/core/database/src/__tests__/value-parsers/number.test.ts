@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { NumberValueParser } from '../../value-parsers';
 
 describe('number value parser', () => {
@@ -21,6 +30,12 @@ describe('number value parser', () => {
     expectValue('123%').toBe(1.23);
     expect(parser.errors.length === 0).toBeTruthy();
     expectValue('22.5507%').toBe(0.225507);
+    expect(parser.errors.length === 0).toBeTruthy();
+    expectValue('2,122,121,122').toBe(2122121122);
+    expect(parser.errors.length === 0).toBeTruthy();
+    expectValue('2,122,121,122.5507').toBe(2122121122.5507);
+    expect(parser.errors.length === 0).toBeTruthy();
+    expectValue('11,122.5507%').toBe(111.225507);
     expect(parser.errors.length === 0).toBeTruthy();
   });
 

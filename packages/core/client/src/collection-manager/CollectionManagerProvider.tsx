@@ -1,103 +1,55 @@
-import { Spin } from 'antd';
-import { keyBy } from 'lodash';
-import React, { useContext, useState } from 'react';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import React, { useCallback } from 'react';
 import { useAPIClient, useRequest } from '../api-client';
-import { templateOptions } from '../collection-manager/Configuration/templates';
+import { useAppSpin } from '../application/hooks/useAppSpin';
+import { CollectionManagerProvider } from '../data-source/collection/CollectionManagerProvider';
+import { useDataSourceManager } from '../data-source/data-source/DataSourceManagerProvider';
 import { useCollectionHistory } from './CollectionHistoryProvider';
 import { CollectionManagerSchemaComponentProvider } from './CollectionManagerSchemaComponentProvider';
-import { CollectionCategroriesContext, CollectionManagerContext } from './context';
-import * as defaultInterfaces from './interfaces';
+import { CollectionCategoriesContext } from './context';
 import { CollectionManagerOptions } from './types';
 
-export const CollectionManagerProvider: React.FC<CollectionManagerOptions> = (props) => {
-  const { service, interfaces, collections = [], refreshCM, updateCollection, templates } = props;
-  const defaultTemplates = keyBy(templateOptions(), (item) => item.name);
-  const ctx = useContext(CollectionManagerContext);
+/**
+ * @deprecated use `CollectionManagerProvider` instead
+ */
+export const CollectionManagerProvider_deprecated: React.FC<CollectionManagerOptions> = (props) => {
   return (
-    <CollectionManagerContext.Provider
-      value={{
-        ...ctx,
-        service,
-        interfaces: { ...defaultInterfaces, ...ctx.interfaces, ...interfaces },
-        templates: { ...defaultTemplates, ...templates },
-        collections: [...ctx.collections, ...collections],
-        refreshCM,
-        updateCollection,
-      }}
-    >
+    <CollectionManagerProvider>
       <CollectionManagerSchemaComponentProvider>{props.children}</CollectionManagerSchemaComponentProvider>
-    </CollectionManagerContext.Provider>
+    </CollectionManagerProvider>
   );
 };
 
 export const RemoteCollectionManagerProvider = (props: any) => {
-  const api = useAPIClient();
-  const [contentLoading, setContentLoading] = useState(false);
+  const dm = useDataSourceManager();
   const { refreshCH } = useCollectionHistory();
-  const options = {
-    resource: 'collections',
-    action: 'list',
-    params: {
-      paginate: false,
-      appends: ['fields', 'category'],
-      filter: {
-        // inherit: false,
-      },
-      sort: ['sort'],
-    },
-  };
-  const coptions = {
-    url: 'collectionCategories:list',
-    params: {
-      paginate: false,
-      sort: ['sort'],
-    },
-  };
-  const service = useRequest(options);
-  const result = useRequest(coptions);
 
+  const service = useRequest<{
+    data: any;
+  }>(() => {
+    return dm.reload().then(refreshCH);
+  });
+
+  const { render } = useAppSpin();
   if (service.loading) {
-    return <Spin />;
+    return render();
   }
-  const refreshCM = async (opts) => {
-    if (opts?.reload) {
-      setContentLoading(true);
-    }
-    const { data } = await api.request(options);
-    service.mutate(data);
-    await refreshCH();
-    if (opts?.reload) {
-      setContentLoading(false);
-    }
-    return data?.data || [];
-  };
-  const refreshCategory = async () => {
-    const { data } = await api.request(coptions);
-    result.mutate(data);
-    return data?.data || [];
-  };
 
-  const updateCollection = (collection) => {
-    service.mutate({ data: collection });
-  };
-
-  return (
-    <CollectionCategroriesProvider service={{ ...result }} refreshCategory={refreshCategory}>
-      <CollectionManagerProvider
-        service={{ ...service, contentLoading, setContentLoading }}
-        collections={service?.data?.data}
-        refreshCM={refreshCM}
-        updateCollection={updateCollection}
-        {...props}
-      />
-    </CollectionCategroriesProvider>
-  );
+  return <CollectionManagerProvider_deprecated {...props}></CollectionManagerProvider_deprecated>;
 };
 
-export const CollectionCategroriesProvider = (props) => {
+export const CollectionCategoriesProvider = (props) => {
   const { service, refreshCategory } = props;
   return (
-    <CollectionCategroriesContext.Provider
+    <CollectionCategoriesContext.Provider
       value={{
         data: service?.data?.data,
         refresh: refreshCategory,
@@ -105,6 +57,6 @@ export const CollectionCategroriesProvider = (props) => {
       }}
     >
       {props.children}
-    </CollectionCategroriesContext.Provider>
+    </CollectionCategoriesContext.Provider>
   );
 };
