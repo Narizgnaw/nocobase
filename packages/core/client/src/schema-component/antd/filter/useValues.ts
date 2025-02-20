@@ -1,10 +1,33 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { useField } from '@formily/react';
 import { merge } from '@formily/shared';
-import flat from 'flat';
+import flat, { unflatten } from 'flat';
 import cloneDeep from 'lodash/cloneDeep';
 import get from 'lodash/get';
-import { useContext, useEffect } from 'react';
+import { useCallback, useContext, useEffect, useMemo } from 'react';
+import { useCollection_deprecated, useCollectionManager_deprecated } from '../../../collection-manager';
 import { FilterContext } from './context';
+
+interface UseValuesReturn {
+  fields: any[];
+  collectionField: any;
+  dataIndex: string[];
+  operators: any[];
+  operator: any;
+  schema: any;
+  value: any;
+  setDataIndex: (dataIndex: string[]) => void;
+  setOperator: (operatorValue: string) => void;
+  setValue: (value: any) => void;
+}
 
 // import { useValues } from './useValues';
 const findOption = (dataIndex = [], options) => {
@@ -20,19 +43,27 @@ const findOption = (dataIndex = [], options) => {
   return option;
 };
 
-export const useValues = () => {
+export const useValues = (): UseValuesReturn => {
+  const { name } = useCollection_deprecated();
+  const { getCollectionJoinField } = useCollectionManager_deprecated();
   const field = useField<any>();
-  const { options } = useContext(FilterContext) || {};
+  const { options, collectionName, field: ctxField } = useContext(FilterContext) || {};
+  const values: object = flat(field.value || {});
+  const path = Object.keys(values).shift() || '';
 
-  const data2value = () => {
+  const collectionField = useMemo(() => {
+    const [fieldPath = ''] = path.split('.$');
+    return getCollectionJoinField(`${collectionName || name}.${fieldPath}`);
+  }, [name, path]);
+
+  const data2value = useCallback(() => {
     field.value = flat.unflatten({
       [`${field.data.dataIndex?.join('.')}.${field.data?.operator?.value}`]: field.data?.value,
     });
-  };
+  }, [field]);
+
   const value2data = () => {
     field.data = field.data || {};
-    const values = flat(field.value);
-    const path = Object.keys(values).shift() || '';
     if (!path || !options) {
       return;
     }
@@ -43,16 +74,24 @@ export const useValues = () => {
     const operators = option?.operators;
     const operator = operators?.find?.((item) => item.value === `$${operatorValue}`);
     field.data.dataIndex = dataIndex;
+    if (dataIndex?.length > 1) {
+      const fieldNames = dataIndex.concat();
+      fieldNames.pop();
+      const targetField = getCollectionJoinField(`${name}.${fieldNames.join('.')}`);
+      ctxField.collectionName = targetField?.target;
+    } else {
+      ctxField.collectionName = null;
+    }
     field.data.operators = operators;
     field.data.operator = operator;
     field.data.schema = merge(option?.schema, operator?.schema);
-    field.data.value = get(field.value, `${fieldPath}.$${operatorValue}`);
+    field.data.value = get(unflatten(field.value), `${fieldPath}.$${operatorValue}`);
   };
-  useEffect(value2data, [field.path.entire]);
-  return {
-    fields: options,
-    ...(field?.data || {}),
-    setDataIndex(dataIndex) {
+
+  useEffect(value2data, [field.path]);
+
+  const setDataIndex = useCallback(
+    (dataIndex) => {
       const option = findOption(dataIndex, options);
       const operator = option?.operators?.[0];
       field.data = field.data || {};
@@ -62,22 +101,48 @@ export const useValues = () => {
       const s2 = cloneDeep(operator?.schema);
       field.data.schema = merge(s1, s2);
       field.data.dataIndex = dataIndex;
-      field.data.value = operator?.noValue ? operator.default || true : null;
+      if (dataIndex?.length > 1) {
+        const fieldNames = dataIndex.concat();
+        fieldNames.pop();
+        const targetField = getCollectionJoinField(`${name}.${fieldNames.join('.')}`);
+        ctxField.collectionName = targetField?.target;
+      } else {
+        ctxField.collectionName = null;
+      }
+      field.data.value = operator?.noValue ? operator.default || true : undefined;
       data2value();
     },
-    setOperator(operatorValue) {
+    [data2value, field, options],
+  );
+
+  const setOperator = useCallback(
+    (operatorValue) => {
       const operator = field.data?.operators?.find?.((item) => item.value === operatorValue);
       field.data.operator = operator;
       const option = findOption(field.data.dataIndex, options);
       const s1 = cloneDeep(option?.schema);
       const s2 = cloneDeep(operator?.schema);
       field.data.schema = merge(s1, s2);
-      field.data.value = operator.noValue ? operator.default || true : null;
+      field.data.value = operator.noValue ? operator.default || true : undefined;
       data2value();
     },
-    setValue(value) {
+    [data2value, field.data, options],
+  );
+
+  const setValue = useCallback(
+    (value) => {
       field.data.value = value;
       data2value();
     },
+    [data2value, field.data],
+  );
+
+  return {
+    fields: options,
+    ...(field?.data || {}),
+    collectionField,
+    setDataIndex,
+    setOperator,
+    setValue,
   };
 };

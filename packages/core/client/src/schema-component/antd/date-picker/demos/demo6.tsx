@@ -1,8 +1,11 @@
+
+
 /**
  * title: DatePicker.RangePicker
  */
-import { FormItem } from '@formily/antd';
+import { FormItem } from '@formily/antd-v5';
 import { DatePicker, Input, SchemaComponent, SchemaComponentProvider } from '@nocobase/client';
+import dayjs from 'dayjs';
 import React from 'react';
 
 const schema = {
@@ -14,7 +17,8 @@ const schema = {
       'x-decorator': 'FormItem',
       'x-component': 'DatePicker.RangePicker',
       'x-component-props': {
-        gmt: false,
+        utc: false,
+        defaultPickerValue: [dayjs('2023-05-01')],
       },
       'x-reactions': [
         {
@@ -41,6 +45,9 @@ const schema = {
       'x-read-pretty': true,
       'x-decorator': 'FormItem',
       'x-component': 'DatePicker.RangePicker',
+      'x-component-props': {
+        defaultPickerValue: [dayjs('2023-05-01')],
+      },
     },
     read2: {
       type: 'string',

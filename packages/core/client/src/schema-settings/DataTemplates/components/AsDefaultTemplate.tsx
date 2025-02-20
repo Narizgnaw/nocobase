@@ -1,9 +1,18 @@
-import { ArrayBase } from '@formily/antd';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { ArrayBase } from '@formily/antd-v5';
 import { Switch } from 'antd';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
-export const AsDefaultTemplate = React.forwardRef((props: any) => {
+export const AsDefaultTemplate = React.forwardRef((props: any, ref) => {
   const array = ArrayBase.useArray();
   const index = ArrayBase.useIndex(props.index);
   const { t } = useTranslation();
@@ -36,3 +45,4 @@ export const AsDefaultTemplate = React.forwardRef((props: any) => {
     />
   );
 });
+AsDefaultTemplate.displayName = 'AsDefaultTemplate';

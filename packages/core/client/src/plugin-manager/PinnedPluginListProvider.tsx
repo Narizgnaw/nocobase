@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { css } from '@emotion/css';
 import { SchemaOptionsContext } from '@formily/react';
 import { get } from 'lodash';
@@ -15,30 +24,36 @@ export const PinnedPluginListProvider: React.FC<{ items: any }> = (props) => {
   );
 };
 
-export const PinnedPluginList = () => {
+const pinnedPluginListClassName = css`
+  display: inline-block;
+
+  .ant-btn {
+    border: 0;
+    height: 46px;
+    width: 46px;
+    border-radius: 0;
+    background: none;
+    color: rgba(255, 255, 255, 0.65);
+    &:hover {
+      background: rgba(255, 255, 255, 0.1) !important;
+    }
+  }
+
+  .ant-btn-default {
+    box-shadow: none;
+  }
+`;
+
+export const PinnedPluginList = React.memo(() => {
   const { allowAll, snippets } = useACLRoleContext();
   const getSnippetsAllow = (aclKey) => {
-    return allowAll || snippets?.includes(aclKey);
+    return allowAll || aclKey === '*' || snippets?.includes(aclKey);
   };
   const ctx = useContext(PinnedPluginListContext);
   const { components } = useContext(SchemaOptionsContext);
+
   return (
-    <div
-      className={css`
-        .ant-btn {
-          border: 0;
-          height: 46px;
-          width: 46px;
-          border-radius: 0;
-          background: none;
-          color: rgba(255, 255, 255, 0.65);
-          &:hover {
-            background: rgba(255, 255, 255, 0.1);
-          }
-        }
-      `}
-      style={{ display: 'inline-block' }}
-    >
+    <div className={pinnedPluginListClassName}>
       {Object.keys(ctx.items)
         .sort((a, b) => ctx.items[a].order - ctx.items[b].order)
         .filter((key) => getSnippetsAllow(ctx.items[key].snippet))
@@ -48,4 +63,6 @@ export const PinnedPluginList = () => {
         })}
     </div>
   );
-};
+});
+
+PinnedPluginList.displayName = 'PinnedPluginList';

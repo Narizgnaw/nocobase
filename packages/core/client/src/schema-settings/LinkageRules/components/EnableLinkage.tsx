@@ -1,6 +1,15 @@
-import React from 'react';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { ArrayBase } from '@formily/antd-v5';
 import { Switch } from 'antd';
-import { ArrayBase } from '@formily/antd';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 export const EnableLinkage = React.forwardRef((props: any, ref) => {
@@ -32,3 +41,4 @@ export const EnableLinkage = React.forwardRef((props: any, ref) => {
     />
   );
 });
+EnableLinkage.displayName = 'EnableLinkage';

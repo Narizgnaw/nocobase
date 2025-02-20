@@ -1,67 +1,95 @@
-import { useMemo } from 'react';
-import { useCompile, useGetFilterOptions } from '../../../schema-component';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
 
-interface GetOptionsParams {
-  schema: any;
-  operator?: string;
-  maxDepth: number;
-  count?: number;
-  getFilterOptions: (collectionName: string) => any[];
-}
+import { Schema } from '@formily/json-schema';
+import { useTranslation } from 'react-i18next';
+import { CollectionFieldOptions_deprecated } from '../../../collection-manager';
+import { CollectionFieldOptions } from '../../../data-source/collection/Collection';
+import { DEFAULT_DATA_SOURCE_KEY } from '../../../data-source/data-source/DataSourceManager';
+import { useCurrentUserContext } from '../../../user';
+import { useBaseVariable } from './useBaseVariable';
 
-const getChildren = (options: any[], { schema, operator, maxDepth, count = 1, getFilterOptions }: GetOptionsParams) => {
-  if (count > maxDepth) {
-    return [];
-  }
-
-  const result = options.map((option) => {
-    if ((option.type !== 'belongsTo' && option.type !== 'hasOne') || !option.target) {
-      return {
-        key: option.name,
-        value: option.name,
-        label: option.title,
-        // TODO: 现在是通过组件的名称来过滤能够被选择的选项，这样的坏处是不够精确，后续可以优化
-        disabled: schema?.['x-component'] !== option.schema?.['x-component'],
-      };
-    }
-
-    const children =
-      getChildren(getFilterOptions(option.target), {
-        schema,
-        operator,
-        maxDepth,
-        count: count + 1,
-        getFilterOptions,
-      }) || [];
-
-    return {
-      key: option.name,
-      value: option.name,
-      label: option.title,
-      children,
-      disabled: children.every((child) => child.disabled),
-    };
+/**
+ * @deprecated
+ * 该 hook 已废弃，请使用 `useCurrentUserVariable` 代替
+ *
+ * 变量：`当前用户`
+ * @param param0
+ * @returns
+ */
+export const useUserVariable = ({
+  collectionField,
+  uiSchema,
+  noDisabled,
+  targetFieldSchema,
+  maxDepth = 3,
+}: {
+  collectionField: CollectionFieldOptions_deprecated;
+  uiSchema: any;
+  maxDepth?: number;
+  noDisabled?: boolean;
+  /** 消费变量值的字段 */
+  targetFieldSchema?: Schema;
+}) => {
+  const { t } = useTranslation();
+  const result = useBaseVariable({
+    collectionField,
+    uiSchema,
+    maxDepth,
+    name: '$user',
+    title: t('Current user'),
+    collectionName: 'users',
+    dataSource: DEFAULT_DATA_SOURCE_KEY,
+    noDisabled,
+    targetFieldSchema,
   });
 
   return result;
 };
 
-export const useUserVariable = ({ operator, schema, level }: { operator?: any; schema: any; level?: number }) => {
-  const compile = useCompile();
-  const getFilterOptions = useGetFilterOptions();
+/**
+ * 变量：`当前用户`
+ * @param param0
+ * @returns
+ */
+export const useCurrentUserVariable = ({
+  collectionField,
+  uiSchema,
+  noDisabled,
+  targetFieldSchema,
+  maxDepth = 3,
+}: {
+  collectionField?: CollectionFieldOptions;
+  uiSchema?: any;
+  maxDepth?: number;
+  noDisabled?: boolean;
+  /** 消费变量值的字段 */
+  targetFieldSchema?: Schema;
+} = {}) => {
+  const { t } = useTranslation();
+  const data = useCurrentUserContext();
+  const currentUserSettings = useBaseVariable({
+    collectionField,
+    uiSchema,
+    maxDepth,
+    name: '$user',
+    title: t('Current user'),
+    collectionName: 'users',
+    noDisabled,
+    targetFieldSchema,
+    dataSource: DEFAULT_DATA_SOURCE_KEY,
+  });
 
-  const children = useMemo(
-    () => getChildren(getFilterOptions('users'), { schema, operator, maxDepth: level || 3, getFilterOptions }) || [],
-    [operator, schema],
-  );
-
-  return useMemo(() => {
-    return compile({
-      label: `{{t("Current user")}}`,
-      value: '$user',
-      key: '$user',
-      disabled: children.every((option) => option.disabled),
-      children: children,
-    });
-  }, [children]);
+  return {
+    /** 变量的配置项 */
+    currentUserSettings,
+    /** 变量的值 */
+    currentUserCtx: data?.data?.data,
+  };
 };

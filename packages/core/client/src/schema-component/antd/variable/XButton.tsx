@@ -1,16 +1,27 @@
-import React, { forwardRef } from 'react';
-import { Button, ButtonProps } from 'antd';
-import { css } from '@emotion/css';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
 
-export const XButton = forwardRef((props: ButtonProps, ref: any) => (
-  <Button
-    ref={ref}
-    className={css`
-      font-style: italic;
-      font-family: 'New York', 'Times New Roman', Times, serif;
-    `}
-    {...props}
-  >
-    x
-  </Button>
-));
+import { Button, ButtonProps } from 'antd';
+import React, { forwardRef, useMemo } from 'react';
+
+export const XButton = forwardRef((props: ButtonProps, ref: any) => {
+  const style = useMemo(() => {
+    return {
+      fontStyle: 'italic',
+      fontFamily: 'New York, Times New Roman, Times, serif',
+    };
+  }, []);
+
+  return (
+    <Button aria-label="variable-button" ref={ref} style={style} {...props}>
+      x{props.children}
+    </Button>
+  );
+});
+XButton.displayName = 'XButton';

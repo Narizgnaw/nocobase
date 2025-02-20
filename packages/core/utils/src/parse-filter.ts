@@ -1,6 +1,18 @@
-import get from 'lodash/get';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import _ from 'lodash';
 import set from 'lodash/set';
 import moment from 'moment';
+import { offsetFromString } from './date';
+import { dayjs } from './dayjs';
+import { getValuesByPath } from './getValuesByPath';
 
 const re = /^\s*\{\{([\s\S]*)\}\}\s*$/;
 
@@ -23,32 +35,34 @@ export function flatten(target, opts?: any) {
 
   function step(object, prev?: any, currentDepth?: any) {
     currentDepth = currentDepth || 1;
-    Object.keys(object).forEach(function (key) {
-      const value = object[key];
-      const isarray = opts.safe && Array.isArray(value);
-      const type = Object.prototype.toString.call(value);
-      const isbuffer = isBuffer(value);
-      const isobject = type === '[object Object]' || type === '[object Array]';
+    if (_.isObjectLike(object)) {
+      Object.keys(object).forEach(function (key) {
+        const value = object[key];
+        const isarray = opts.safe && Array.isArray(value);
+        const type = Object.prototype.toString.call(value);
+        const isbuffer = isBuffer(value);
+        const isobject = type === '[object Object]' || type === '[object Array]';
 
-      const newKey = prev ? prev + delimiter + transformKey(key) : transformKey(key);
+        const newKey = prev ? prev + delimiter + transformKey(key) : transformKey(key);
 
-      if (opts.breakOn?.({ key, value, path: newKey })) {
+        if (opts.breakOn?.({ key, value, path: newKey })) {
+          output[newKey] = transformValue(value, newKey);
+          return;
+        }
+
+        if (
+          !isarray &&
+          !isbuffer &&
+          isobject &&
+          Object.keys(value).length &&
+          (!opts.maxDepth || currentDepth < maxDepth)
+        ) {
+          return step(value, newKey, currentDepth + 1);
+        }
+
         output[newKey] = transformValue(value, newKey);
-        return;
-      }
-
-      if (
-        !isarray &&
-        !isbuffer &&
-        isobject &&
-        Object.keys(value).length &&
-        (!opts.maxDepth || currentDepth < maxDepth)
-      ) {
-        return step(value, newKey, currentDepth + 1);
-      }
-
-      output[newKey] = transformValue(value, newKey);
-    });
+      });
+    }
   }
 
   step(target);
@@ -56,12 +70,12 @@ export function flatten(target, opts?: any) {
   return output;
 }
 
-function unflatten(obj, opts: any = {}) {
+export function unflatten(obj, opts: any = {}) {
   const parsed = {};
   const transformValue = opts.transformValue || keyIdentity;
-  Object.keys(obj).forEach((key) => {
+  for (const key of Object.keys(obj)) {
     set(parsed, key, transformValue(obj[key], key));
-  });
+  }
   return parsed;
 }
 
@@ -93,6 +107,7 @@ const dateValueWrapper = (value: any, timezone?: string) => {
   if (!value) {
     return null;
   }
+
   if (Array.isArray(value)) {
     if (value.length === 2) {
       value.push('[]', timezone);
@@ -103,7 +118,7 @@ const dateValueWrapper = (value: any, timezone?: string) => {
   }
 
   if (typeof value === 'string') {
-    if (!timezone || /(\+|\-)\d\d\:\d\d$/.test(value)) {
+    if (!timezone || /(\+|-)\d\d:\d\d$/.test(value)) {
       return value;
     }
     return value + timezone;
@@ -161,13 +176,18 @@ export const parseFilter = async (filter: any, opts: ParseFilterOptions = {}) =>
         const match = re.exec(value);
         if (match) {
           const key = match[1].trim();
-          const val = get(vars, key, null);
+          const val = getValuesByPath(vars, key, null);
           const field = getField?.(path);
           value = typeof val === 'function' ? val?.({ field, operator, timezone, now }) : val;
         }
       }
       if (isDateOperator(operator)) {
         const field = getField?.(path);
+
+        if (field?.constructor.name === 'DateOnlyField' || field?.constructor.name === 'DatetimeNoTzField') {
+          return value;
+        }
+
         return dateValueWrapper(value, field?.timezone || timezone);
       }
       return value;
@@ -177,17 +197,17 @@ export const parseFilter = async (filter: any, opts: ParseFilterOptions = {}) =>
 
 export type GetDayRangeOptions = {
   now?: any;
-  timezone?: string;
+  timezone?: string | number;
   offset: number;
 };
 
 export function getDayRange(options: GetDayRangeOptions) {
   const { now, timezone = '+00:00', offset } = options;
-  const m = toMoment(now).utcOffset(timezone);
+  let m = toMoment(now).utcOffset(offsetFromString(timezone));
   if (offset > 0) {
     return [
       // 第二天开始计算
-      m.add(1, 'day').startOf('day').format('YYYY-MM-DD'),
+      (m = m.add(1, 'day').startOf('day')).format('YYYY-MM-DD'),
       // 第九天开始前结束
       m.clone().add(offset, 'day').startOf('day').format('YYYY-MM-DD'),
       '[)',
@@ -208,32 +228,32 @@ export function getDayRange(options: GetDayRangeOptions) {
   ];
 }
 
-function toMoment(value) {
+function toMoment(value, useMoment = false) {
   if (!value) {
-    return moment();
+    return (useMoment ? moment() : dayjs()) as dayjs.Dayjs;
   }
-  if (moment.isMoment(value)) {
+  if (dayjs.isDayjs(value)) {
     return value;
   }
-  return moment(value);
+  return (useMoment ? moment(value) : dayjs(value)) as dayjs.Dayjs;
 }
 
 export type Utc2unitOptions = {
   now?: any;
   unit: any;
-  timezone?: string;
+  timezone?: string | number;
   offset?: number;
 };
 
 export function utc2unit(options: Utc2unitOptions) {
   const { now, unit, timezone = '+00:00', offset } = options;
-  const m = toMoment(now);
-  m.utcOffset(timezone);
-  m.startOf(unit);
+  let m = toMoment(now, unit === 'isoWeek');
+  m = m.utcOffset(offsetFromString(timezone));
+  m = m.startOf(unit);
   if (offset > 0) {
-    m.add(offset, unit === 'isoWeek' ? 'week' : unit);
+    m = m.add(offset, unit);
   } else if (offset < 0) {
-    m.subtract(-1 * offset, unit === 'isoWeek' ? 'week' : unit);
+    m = m.subtract(-1 * offset, unit);
   }
   const fn = {
     year: () => m.format('YYYY'),
@@ -246,9 +266,15 @@ export function utc2unit(options: Utc2unitOptions) {
   const r = fn[unit]?.();
   return timezone ? r + timezone : r;
 }
-
-const toUnit = (unit, offset?: number) => {
-  return ({ now, timezone, field }) => {
+type ToUnitParams = {
+  now?: any;
+  timezone?: string | number;
+  field?: {
+    timezone?: string | number;
+  };
+};
+export const toUnit = (unit, offset?: number) => {
+  return ({ now, timezone, field }: ToUnitParams) => {
     if (field?.timezone) {
       timezone = field?.timezone;
     }
@@ -257,7 +283,7 @@ const toUnit = (unit, offset?: number) => {
 };
 
 const toDays = (offset: number) => {
-  return ({ now, timezone, field }) => {
+  return ({ now, timezone, field }: ToUnitParams) => {
     if (field?.timezone) {
       timezone = field?.timezone;
     }
@@ -267,6 +293,7 @@ const toDays = (offset: number) => {
 
 export function getDateVars() {
   return {
+    now: new Date().toISOString(),
     today: toUnit('day'),
     yesterday: toUnit('day', -1),
     tomorrow: toUnit('day', 1),
@@ -292,4 +319,9 @@ export function getDateVars() {
     last90Days: toDays(-90),
     next90Days: toDays(90),
   };
+}
+
+export function splitPathToTwoParts(path: string) {
+  const parts = path.split('.');
+  return [parts.shift(), parts.join('.')];
 }

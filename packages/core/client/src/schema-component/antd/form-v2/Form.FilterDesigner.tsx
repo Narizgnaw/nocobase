@@ -1,9 +1,15 @@
-import { useFieldSchema } from '@formily/react';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { useCollection } from '../../../collection-manager';
-import { FilterBlockType } from '../../../filter-provider/utils';
-import { GeneralSchemaDesigner, SchemaSettings } from '../../../schema-settings';
+import { useCollection_deprecated } from '../../../collection-manager';
+import { GeneralSchemaDesigner } from '../../../schema-settings';
 import { useSchemaTemplate } from '../../../schema-templates';
 
 /**
@@ -11,29 +17,14 @@ import { useSchemaTemplate } from '../../../schema-templates';
  * @returns
  */
 export const FilterDesigner = () => {
-  const { name, title } = useCollection();
+  const { name, title } = useCollection_deprecated();
   const template = useSchemaTemplate();
-  const fieldSchema = useFieldSchema();
-  const { t } = useTranslation();
-  const defaultResource = fieldSchema?.['x-decorator-props']?.resource;
 
   return (
-    <GeneralSchemaDesigner template={template} title={title || name}>
-      <SchemaSettings.BlockTitleItem />
-      <SchemaSettings.FormItemTemplate
-        componentName={'FilterFormItem'}
-        collectionName={name}
-        resourceName={defaultResource}
-      />
-      <SchemaSettings.LinkageRules collectionName={name} />
-      <SchemaSettings.ConnectDataBlocks type={FilterBlockType.FORM} emptyDescription={t('No blocks to connect')} />
-      <SchemaSettings.Divider />
-      <SchemaSettings.Remove
-        removeParentsIfNoChildren
-        breakRemoveOn={{
-          'x-component': 'Grid',
-        }}
-      />
-    </GeneralSchemaDesigner>
+    <GeneralSchemaDesigner
+      schemaSettings="blockSettings:filterForm"
+      template={template}
+      title={title || name}
+    ></GeneralSchemaDesigner>
   );
 };

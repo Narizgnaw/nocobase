@@ -1,4 +1,14 @@
-import moment from 'moment';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { vi } from 'vitest';
+import dayjs from 'dayjs';
 import { mapDatePicker } from '../util';
 
 describe('mapDatePicker', () => {
@@ -20,7 +30,7 @@ describe('mapDatePicker', () => {
     };
     const result = mapDatePicker()(props);
     expect(result.value.format('YYYY-MM-DD HH:mm:ss')).toBe(
-      moment('2022-02-22T22:22:22.000Z').format('YYYY-MM-DD HH:mm:ss'),
+      dayjs('2022-02-22T22:22:22.000Z').format('YYYY-MM-DD HH:mm:ss'),
     );
   });
 
@@ -48,139 +58,139 @@ describe('mapDatePicker', () => {
     const props = {
       showTime: true,
       gmt: true,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment.utc('2022-02-22 22:22:22'));
-    expect(props.onChange).toHaveBeenCalledWith('2022-02-22T22:22:22.000Z');
+    result.onChange(dayjs.utc('2022-02-22 22:22:22'));
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-22 22:22:22');
   });
 
   it('should call onChange with correct value when showTime is true and gmt is false', () => {
     const props = {
       showTime: true,
       gmt: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment('2022-02-22 22:22:22');
+    const m = dayjs('2022-02-22 22:22:22');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-22 22:22:22');
   });
 
   it('should call onChange with correct value when showTime is false and gmt is true', () => {
     const props = {
       showTime: false,
       gmt: true,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment.utc('2022-02-22'));
-    expect(props.onChange).toHaveBeenCalledWith('2022-02-22T00:00:00.000Z');
+    result.onChange(dayjs.utc('2022-02-22'));
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-22');
   });
 
   it('should call onChange with correct value when showTime is false and gmt is false', () => {
     const props = {
       showTime: false,
       gmt: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment('2022-02-22');
+    const m = dayjs('2022-02-22');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-22');
   });
 
   it('should call onChange with correct value when picker is year and gmt is true', () => {
     const props = {
       picker: 'year',
       gmt: true,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment.utc('2022-01-01T00:00:00.000Z'));
-    expect(props.onChange).toHaveBeenCalledWith('2022-01-01T00:00:00.000Z');
+    result.onChange(dayjs.utc('2022-01-01T00:00:00.000Z'));
+    expect(props.onChange).toHaveBeenCalledWith('2022-01-01');
   });
 
   it('should call onChange with correct value when picker is year and gmt is false', () => {
     const props = {
       picker: 'year',
       gmt: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment('2022-02-01 00:00:00');
+    const m = dayjs('2022-02-01 00:00:00');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.startOf('year').toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-01-01');
   });
 
   it('should call onChange with correct value when picker is month and gmt is true', () => {
     const props = {
       picker: 'month',
       gmt: true,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment.utc('2022-02-22T00:00:00.000Z'));
-    expect(props.onChange).toHaveBeenCalledWith('2022-02-01T00:00:00.000Z');
+    result.onChange(dayjs.utc('2022-02-22T00:00:00.000Z'));
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-01');
   });
 
   it('should call onChange with correct value when picker is month and gmt is false', () => {
     const props = {
       picker: 'month',
       gmt: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment('2022-02-01 00:00:00');
+    const m = dayjs('2022-02-01 00:00:00');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.startOf('month').toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-01');
   });
 
   it('should call onChange with correct value when picker is quarter and gmt is true', () => {
     const props = {
       picker: 'quarter',
       gmt: true,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment.utc('2022-02-22T00:00:00.000Z'));
-    expect(props.onChange).toHaveBeenCalledWith('2022-01-01T00:00:00.000Z');
+    result.onChange(dayjs.utc('2022-02-22T00:00:00.000Z'));
+    expect(props.onChange).toHaveBeenCalledWith('2022-01-01');
   });
 
   it('should call onChange with correct value when picker is quarter and gmt is false', () => {
     const props = {
       picker: 'quarter',
       gmt: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment('2022-02-01 00:00:00');
+    const m = dayjs('2022-02-01 00:00:00');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.startOf('quarter').toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-01-01');
   });
 
   it('should call onChange with correct value when picker is week and gmt is true', () => {
     const props = {
       picker: 'week',
       gmt: true,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment.utc('2022-02-21T00:00:00.000Z');
+    const m = dayjs.utc('2022-02-21T00:00:00.000Z');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.startOf('week').add(1, 'day').toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-20');
   });
 
   it('should call onChange with correct value when picker is week and gmt is false', () => {
     const props = {
       picker: 'week',
       gmt: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    const m = moment('2022-02-21 00:00:00');
+    const m = dayjs('2022-02-21 00:00:00');
     result.onChange(m);
-    expect(props.onChange).toHaveBeenCalledWith(m.startOf('week').add(1, 'day').toISOString());
+    expect(props.onChange).toHaveBeenCalledWith('2022-02-20');
   });
 
   it('should call onChange with correct value when utc is false', () => {
@@ -188,10 +198,10 @@ describe('mapDatePicker', () => {
       showTime: true,
       gmt: true,
       utc: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment('2022-02-22 22:22:22'));
+    result.onChange(dayjs('2022-02-22 22:22:22'));
     expect(props.onChange).toHaveBeenCalledWith('2022-02-22 22:22:22');
   });
 
@@ -200,10 +210,10 @@ describe('mapDatePicker', () => {
       showTime: false,
       gmt: true,
       utc: false,
-      onChange: jest.fn(),
+      onChange: vi.fn(),
     };
     const result = mapDatePicker()(props);
-    result.onChange(moment('2022-01-01 23:00:00'));
+    result.onChange(dayjs('2022-01-01 23:00:00'));
     expect(props.onChange).toHaveBeenCalledWith('2022-01-01');
   });
 

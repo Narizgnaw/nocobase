@@ -1,10 +1,18 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 // json-templates
 // Simple templating within JSON structures.
 //
 // Created by Curran Kelleher and Chrostophe Serafin.
 // Contributions from Paul Brewer and Javier Blanco Martinez.
-import objectPath from 'object-path';
-import dedupe from 'dedupe';
+import { get } from 'lodash';
 
 // An enhanced version of `typeof` that handles arrays and dates as well.
 function type(value) {
@@ -42,11 +50,7 @@ function Parameter(match) {
 
 // Constructs a template function with deduped `parameters` property.
 function Template(fn, parameters) {
-  // Paul Brewer Dec 2017 add deduplication call, use only key property to eliminate
-  Object.assign(fn, {
-    parameters: dedupe(parameters, (item) => item.key),
-  });
-
+  fn.parameters = Array.from(new Map(parameters.map((parameter) => [parameter.key, parameter])).values());
   return fn;
 }
 
@@ -78,7 +82,7 @@ export function parse(value) {
 const parseString = (() => {
   // This regular expression detects instances of the
   // template parameter syntax such as {{foo}} or {{foo:someDefault}}.
-  const regex = /{{(\w|:|[\s-+.,@///()?=*_$])+}}/g;
+  const regex = /{{(\w|:|[\s-+.,@/()?=*_$])+}}/g;
 
   return (str) => {
     let parameters = [];
@@ -91,8 +95,9 @@ const parseString = (() => {
         context = context || {};
         return matches.reduce((result, match, i) => {
           const parameter = parameters[i];
-          let value = objectPath.get(context, parameter.key);
-          if (value == null) {
+          let value = get(context, parameter.key);
+
+          if (typeof value === 'undefined') {
             value = parameter.defaultValue;
           }
 
@@ -100,13 +105,14 @@ const parseString = (() => {
             value = value();
           }
 
-          if (typeof value === 'object') {
+          // Accommodate non-string as original values.
+          if (matches.length === 1 && str.startsWith('{{') && str.endsWith('}}')) {
             return value;
           }
 
-          // Accommodate numbers as values.
-          if (matches.length === 1 && str.startsWith('{{') && str.endsWith('}}')) {
-            return value;
+          // Treat Date value inside string to ISO string.
+          if (value instanceof Date) {
+            value = value.toISOString();
           }
 
           return result.replace(match, value == null ? '' : value);

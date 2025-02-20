@@ -1,18 +1,35 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { CloseCircleFilled } from '@ant-design/icons';
 import { css, cx } from '@emotion/css';
 import { useForm } from '@formily/react';
-import { Input as AntInput, Cascader, DatePicker, InputNumber, Select, Tag } from 'antd';
-import moment from 'moment';
-import React from 'react';
-import { useTranslation } from 'react-i18next';
-
+import { error } from '@nocobase/utils/client';
+import { Input as AntInput, Cascader, CascaderProps, DatePicker, InputNumber, Select, Space, Tag } from 'antd';
+import useAntdInputStyle from 'antd/es/input/style';
+import type { DefaultOptionType } from 'antd/lib/cascader';
 import classNames from 'classnames';
-import { useCompile } from '../..';
+import dayjs from 'dayjs';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useCompile } from '../../hooks';
 import { XButton } from './XButton';
+import { useStyles } from './style';
+import { Json } from '../input';
 
 const JT_VALUE_RE = /^\s*{{\s*([^{}]+)\s*}}\s*$/;
 
-function parseValue(value: any): string | string[] {
+type ParseOptions = {
+  stringToDate?: boolean;
+};
+
+function parseValue(value: any, options: ParseOptions = {}): string | string[] {
   if (value == null) {
     return 'null';
   }
@@ -22,37 +39,45 @@ function parseValue(value: any): string | string[] {
     if (matched) {
       return matched[1].split('.');
     }
-    // const ts = Date.parse(value);
-    // if (value.match(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{0,3})Z$/) && !Number.isNaN(Date.parse(value))) {
-    //   return {
-    //     type: 'date',
-    //   };
-    // }
+    if (options.stringToDate) {
+      if (!Number.isNaN(Date.parse(value))) {
+        return 'date';
+      }
+    }
   }
   return type === 'object' && value instanceof Date ? 'date' : type;
+}
+
+function NullComponent() {
+  const { t } = useTranslation();
+  return <AntInput style={{ width: '100%' }} readOnly placeholder={`<${t('Null')}>`} className="null-value" />;
 }
 
 const ConstantTypes = {
   string: {
     label: `{{t("String")}}`,
     value: 'string',
-    component: function StringComponent({ onChange, value }) {
-      return <AntInput value={value} onChange={(ev) => onChange(ev.target.value)} />;
+    component: function StringComponent({ onChange, value, ...otherProps }) {
+      return <AntInput value={value} onChange={(ev) => onChange(ev.target.value)} {...otherProps} />;
     },
-    default: '',
+    default() {
+      return '';
+    },
   },
   number: {
     label: '{{t("Number")}}',
     value: 'number',
-    component: function NumberComponent({ onChange, value }) {
-      return <InputNumber value={value} onChange={onChange} />;
+    component: function NumberComponent({ onChange, value, ...otherProps }) {
+      return <InputNumber value={value} onChange={onChange} {...otherProps} />;
     },
-    default: 0,
+    default() {
+      return 0;
+    },
   },
   boolean: {
     label: `{{t("Boolean")}}`,
     value: 'boolean',
-    component: function BooleanComponent({ onChange, value }) {
+    component: function BooleanComponent({ onChange, value, ...otherProps }) {
       const { t } = useTranslation();
       return (
         <Select
@@ -63,202 +88,412 @@ const ConstantTypes = {
             { value: true, label: t('True') },
             { value: false, label: t('False') },
           ]}
+          {...otherProps}
+          className={classNames(otherProps.className, 'auto-width')}
         />
       );
     },
-    default: false,
+    default() {
+      return false;
+    },
   },
   date: {
     label: '{{t("Date")}}',
     value: 'date',
-    component: function DateComponent({ onChange, value }) {
+    component: function DateComponent({ onChange, value, ...otherProps }) {
       return (
         <DatePicker
-          value={moment(value)}
+          value={dayjs(value)}
           onChange={(d) => (d ? onChange(d.toDate()) : null)}
           allowClear={false}
           showTime
+          {...otherProps}
         />
       );
     },
-    default: (() => {
+    default() {
       const now = new Date();
       return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    })(),
-  },
-  null: {
-    label: `{{t("Null")}}`,
-    value: 'null',
-    component: function NullComponent() {
-      const { t } = useTranslation();
-      return <AntInput readOnly placeholder={t('Null')} className="null-value" />;
     },
-    default: null,
+  },
+  // NOTE: keep null option here for compatibility
+  null: {
+    label: '{{t("Null")}}',
+    value: 'null',
+    component: NullComponent,
+    default() {
+      return null;
+    },
+  },
+  object: {
+    label: '{{t("JSON")}}',
+    value: 'object',
+    component: Json,
+    default() {
+      return {};
+    },
   },
 };
 
-function getTypedConstantOption(type) {
+type UseTypeConstantType = true | (string | [string, Record<string, any>])[];
+
+function getTypedConstantOption(type: string, types: UseTypeConstantType, fieldNames) {
+  const allTypes = Object.values(ConstantTypes).filter((item) => item.value !== 'null');
+  const children = (
+    types
+      ? allTypes.filter(
+          (item) =>
+            (Array.isArray(types) &&
+              types.filter((t) => (Array.isArray(t) ? t[0] === item.value : t === item.value)).length) ||
+            types === true,
+        )
+      : allTypes
+  ).map((item) =>
+    Object.keys(fieldNames).reduce(
+      (result, key) =>
+        key in item
+          ? Object.assign(result, {
+              [fieldNames[key]]: item[key],
+            })
+          : result,
+      { ...item },
+    ),
+  );
   return {
-    value: '',
+    value: ' ',
     label: '{{t("Constant")}}',
-    children: Object.values(ConstantTypes),
+    children,
+    [fieldNames.value]: ' ',
+    [fieldNames.label]: '{{t("Constant")}}',
+    [fieldNames.children]: children,
     component: ConstantTypes[type]?.component,
   };
 }
 
-type VariableOptions = {
-  value: string;
-  label?: string;
-  children?: VariableOptions[];
+export type VariableInputProps = {
+  value?: string;
+  scope?: Partial<DefaultOptionType>[] | (() => Partial<DefaultOptionType>[]);
+  onChange: (value: string, optionPath?: any[]) => void;
+  children?: any;
+  button?: React.ReactElement;
+  useTypedConstant?: UseTypeConstantType;
+  nullable?: boolean;
+  changeOnSelect?: CascaderProps['changeOnSelect'];
+  fieldNames?: CascaderProps['fieldNames'];
+  disabled?: boolean;
+  style?: React.CSSProperties;
+  className?: string;
+  parseOptions?: ParseOptions;
+  hideVariableButton?: boolean;
 };
 
-export function Input(props) {
-  const compile = useCompile();
-  const form = useForm();
+export function Input(props: VariableInputProps) {
+  const {
+    value = '',
+    onChange,
+    children,
+    button,
+    useTypedConstant,
+    nullable = true,
+    style,
+    className,
+    changeOnSelect,
+    fieldNames,
+    parseOptions,
+    hideVariableButton,
+  } = props;
+  const scope = typeof props.scope === 'function' ? props.scope() : props.scope;
+  const { wrapSSR, hashId, componentCls, rootPrefixCls } = useStyles({ hideVariableButton });
 
-  const { value = '', scope, onChange, children, button, useTypedConstant, style, className } = props;
-  const parsed = parseValue(value);
+  // 添加 antd input 样式，防止样式缺失
+  useAntdInputStyle(`${rootPrefixCls}-input`);
+
+  const compile = useCompile();
+  const { t } = useTranslation();
+  const form = useForm();
+  const [options, setOptions] = React.useState<DefaultOptionType[]>([]);
+  const [variableText, setVariableText] = React.useState([]);
+  const [isFieldValue, setIsFieldValue] = React.useState(
+    hideVariableButton || (children && value != null ? true : false),
+  );
+
+  const parsed = useMemo(() => parseValue(value, parseOptions), [parseOptions, value]);
   const isConstant = typeof parsed === 'string';
   const type = isConstant ? parsed : '';
   const variable = isConstant ? null : parsed;
-  const variableOptions = typeof scope === 'function' ? scope() : scope ?? [];
+  // const [prevType, setPrevType] = React.useState<string>(type);
+  const names = Object.assign(
+    {
+      label: 'label',
+      value: 'value',
+      children: 'children',
+    },
+    fieldNames ?? {},
+  );
 
-  const { component: ConstantComponent, ...constantOption }: VariableOptions & { component?: React.FC<any> } = children
-    ? {
-        value: '',
-        label: '{{t("Constant")}}',
-      }
-    : useTypedConstant
-    ? getTypedConstantOption(type)
-    : {
-        value: '',
-        label: '{{t("Null")}}',
-        component: ConstantTypes.null.component,
+  const constantOption: DefaultOptionType & { component?: React.FC<any> } = useMemo(() => {
+    if (children) {
+      return {
+        value: '$',
+        label: t('Constant'),
+        [names.value]: '$',
+        [names.label]: t('Constant'),
       };
-  const options: VariableOptions[] = compile([constantOption, ...variableOptions]);
-
-  function onSwitch(next) {
-    if (next[0] === '') {
-      if (next[1]) {
-        if (next[1] !== type) {
-          onChange(ConstantTypes[next[1]]?.default ?? null);
-        }
-      } else {
-        if (variable) {
-          onChange(null);
-        }
-      }
-      return;
     }
-    onChange(`{{${next.join('.')}}}`);
+
+    if (useTypedConstant) {
+      return getTypedConstantOption(type, useTypedConstant, names);
+    }
+    return null;
+  }, [type, useTypedConstant]);
+
+  const ConstantComponent = constantOption?.component ?? NullComponent;
+  const constantComponentProps = Array.isArray(useTypedConstant)
+    ? (useTypedConstant.find((item) => Array.isArray(item) && item[0] === type)?.[1] as Record<string, any>) ?? {}
+    : {};
+  let cValue;
+  if (value == null) {
+    if (nullable) {
+      if (children && isFieldValue) {
+        cValue = ['$'];
+      } else {
+        cValue = [''];
+      }
+    } else {
+      if (children) {
+        cValue = ['$'];
+      } else {
+        cValue = [' ', type];
+      }
+    }
+  } else {
+    cValue = children ? ['$'] : [' ', type];
   }
 
-  const variableText = variable
-    ?.reduce((opts, key, i) => {
-      const option = (i ? (opts[i - 1] as VariableOptions)?.children : options)?.find((item) => item.value === key);
-      return option ? opts.concat(option) : opts;
-    }, [] as VariableOptions[])
-    .map((item) => item.label)
-    .join(' / ');
+  if (hideVariableButton) {
+    cValue = ['$'];
+  }
+
+  useEffect(() => {
+    const { component, ...cOption } = constantOption ?? {};
+    const options = [
+      ...(nullable
+        ? [
+            {
+              value: '',
+              label: t('Null'),
+              [names.value]: '',
+              [names.label]: t('Null'),
+            },
+          ]
+        : []),
+      ...(constantOption ? [compile(cOption)] : []),
+      ...(scope ? [...scope] : []),
+    ].filter((item) => {
+      return !item.deprecated || variable?.[0] === item[names.value];
+    });
+
+    setOptions(options);
+  }, [scope, variable, constantOption, nullable]);
+
+  const loadData = async (selectedOptions: DefaultOptionType[]) => {
+    const option = selectedOptions[selectedOptions.length - 1];
+    if (!option.children?.length && !option.isLeaf && option.loadChildren) {
+      let activeKey;
+      if (variable && variable.length >= 2) {
+        for (const key of variable) {
+          if (key === option[names.value]) {
+            activeKey = key;
+            break;
+          }
+        }
+      }
+      await option.loadChildren(option, activeKey, variable);
+      setOptions((prev) => [...prev]);
+    }
+  };
+
+  const onSwitch = useCallback(
+    (next, optionPath: any[]) => {
+      if (next[0] === '$') {
+        setIsFieldValue(true);
+        if (variable) {
+          onChange(null, optionPath);
+        }
+        return;
+      } else {
+        setIsFieldValue(false);
+      }
+      if (next[0] === '') {
+        onChange(null);
+        return;
+      }
+      if (next[0] === ' ') {
+        if (next[1]) {
+          if (next[1] !== type) {
+            // setPrevType(next[1]);
+            onChange(ConstantTypes[next[1]]?.default?.() ?? null, optionPath);
+          }
+        } else {
+          if (variable) {
+            onChange(null, optionPath);
+          }
+        }
+        return;
+      }
+      onChange(`{{${next.join('.')}}}`, optionPath);
+    },
+    [type, variable, onChange],
+  );
+
+  const onClearVariable = useCallback(() => {
+    setIsFieldValue(Boolean(children));
+    if (constantOption?.children?.length) {
+      const v = constantOption.children[0].default();
+      return onChange(v);
+    }
+    onChange(null);
+  }, [constantOption]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!variable || options.length <= 1) {
+        return;
+      }
+      let prevOption: DefaultOptionType = null;
+      const labels = [];
+
+      for (let i = 0; i < variable.length; i++) {
+        const key = variable[i];
+        try {
+          if (i === 0) {
+            prevOption = options.find((item) => item[names.value] === key);
+          } else {
+            if (prevOption.loadChildren && !prevOption.children?.length) {
+              await prevOption.loadChildren(prevOption, key, variable);
+            }
+            prevOption = prevOption.children.find((item) => item[names.value] === key);
+          }
+
+          // 如果为空则说明相关字段已被删除
+          // fix T-1565
+          if (!prevOption) {
+            return;
+          }
+
+          labels.push(prevOption[names.label]);
+        } catch (err) {
+          error(err);
+        }
+      }
+      setOptions([...options]);
+      setVariableText([...labels]);
+    };
+
+    run();
+    // NOTE: watch `options.length` and it only happens once
+  }, [variable, options.length]);
 
   const disabled = props.disabled || form.disabled;
 
-  return (
-    <AntInput.Group
-      compact
-      style={style}
-      className={classNames(
-        className,
-        css`
-          width: auto;
-          display: flex !important;
-          .ant-input-disabled {
-            .ant-tag {
-              color: #bfbfbf;
-              border-color: #d9d9d9;
-            }
-          }
-          .ant-input.null-value {
-            width: 4em;
-            min-width: 4em;
-          }
-        `,
-      )}
-    >
+  return wrapSSR(
+    <Space.Compact style={style} className={classNames(componentCls, hashId, className)}>
       {variable ? (
         <div
-          className={css`
-            position: relative;
-            line-height: 0;
+          className={cx(
+            'variable',
+            css`
+              position: relative;
+              line-height: 0;
 
-            &:hover {
-              .ant-select-clear {
-                opacity: 0.8;
+              &:hover {
+                .clear-button {
+                  display: inline-block;
+                }
               }
-            }
 
-            .ant-input {
-              overflow: auto;
-              white-space: nowrap;
-              ${disabled ? '' : 'padding-right: 28px;'}
+              .ant-input {
+                overflow: auto;
+                white-space: nowrap;
+                ${disabled ? '' : 'padding-right: 28px;'}
 
-              .ant-tag {
-                display: inline;
-                line-height: 19px;
-                margin: 0;
-                padding: 2px 7px;
-                border-radius: 10px;
+                .ant-tag {
+                  display: inline;
+                  line-height: 19px;
+                  margin: 0;
+                  padding: 2px 7px;
+                  border-radius: 10px;
+                }
               }
-            }
-          `}
+            `,
+          )}
         >
           <div
-            onInput={(e) => e.preventDefault()}
-            onKeyDown={(e) => {
-              if (e.key !== 'Backspace') {
-                e.preventDefault();
-                return;
-              }
-              onChange(null);
-            }}
-            className={cx('ant-input', { 'ant-input-disabled': disabled })}
-            contentEditable={!disabled}
-            suppressContentEditableWarning
+            role="button"
+            aria-label="variable-tag"
+            style={{ overflow: 'hidden' }}
+            className={cx('ant-input', { 'ant-input-disabled': disabled }, hashId)}
           >
-            <Tag contentEditable={false} color="blue">
-              {variableText}
+            <Tag color="blue">
+              {variableText.map((item, index) => {
+                return (
+                  <React.Fragment key={item}>
+                    {index ? ' / ' : ''}
+                    {item}
+                  </React.Fragment>
+                );
+              })}
             </Tag>
           </div>
           {!disabled ? (
             <span
-              className={cx(
-                'ant-select-clear',
-                css`
-                  user-select: 'none';
-                `,
-              )}
+              role="button"
+              aria-label="icon-close"
+              className={cx('clear-button')}
               // eslint-disable-next-line react/no-unknown-property
               unselectable="on"
-              aria-hidden
-              onClick={() => onChange(null)}
+              onClick={onClearVariable}
             >
               <CloseCircleFilled />
             </span>
           ) : null}
         </div>
       ) : (
-        children ?? <ConstantComponent value={value} onChange={onChange} />
+        <div style={{ flex: 1 }}>
+          {children && (isFieldValue || !nullable) ? (
+            children
+          ) : ConstantComponent ? (
+            <ConstantComponent
+              role="button"
+              aria-label="variable-constant"
+              {...constantComponentProps}
+              value={value}
+              onChange={onChange}
+            />
+          ) : null}
+        </div>
       )}
-      {options.length > 1 ? (
+      {hideVariableButton ? null : (
         <Cascader
           options={options}
-          value={variable ?? ['', ...(children || !constantOption.children?.length ? [] : [type])]}
+          value={variable ?? cValue}
           onChange={onSwitch}
-          changeOnSelect
+          loadData={loadData as any}
+          changeOnSelect={changeOnSelect}
+          fieldNames={fieldNames}
+          disabled={disabled}
         >
-          {button ?? <XButton type={variable ? 'primary' : 'default'} />}
+          {button ?? (
+            <XButton
+              className={css(`
+              margin-left: -1px;
+            `)}
+              type={variable ? 'primary' : 'default'}
+              disabled={disabled}
+            />
+          )}
         </Cascader>
-      ) : null}
-    </AntInput.Group>
+      )}
+    </Space.Compact>,
   );
 }

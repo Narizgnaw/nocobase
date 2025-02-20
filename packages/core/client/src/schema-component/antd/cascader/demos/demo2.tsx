@@ -1,4 +1,6 @@
-import { FormItem } from '@formily/antd';
+
+
+import { FormItem } from '@formily/antd-v5';
 import { ArrayField } from '@formily/core';
 import { useField } from '@formily/react';
 import { action } from '@formily/reactive';
@@ -64,7 +66,7 @@ const useLoadData = () => {
         },
       ];
       field.dataSource = [...field.dataSource];
-    }, 500);
+    }, 300);
   };
 };
 

@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ISchema, Schema } from '@formily/react';
 
 export const isCollectionFieldComponent = (schema: ISchema) => {
@@ -16,17 +25,4 @@ export function extractIndex(str) {
     }
   });
   return numbers.join('.');
-}
-
-export function getIdsWithChildren(nodes) {
-  const ids = [];
-  if (nodes) {
-    for (const node of nodes) {
-      if (node.children && node.children.length > 0) {
-        ids.push(node.id);
-        ids.push(...getIdsWithChildren(node.children));
-      }
-    }
-  }
-  return ids;
 }

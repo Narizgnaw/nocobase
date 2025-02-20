@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { getDateVars, parseFilter } from '@nocobase/utils';
 
 function getUser(ctx) {
@@ -27,7 +36,7 @@ function isNumeric(str: any) {
   return !isNaN(str as any) && !isNaN(parseFloat(str));
 }
 
-export const parseVariables = async (ctx, next) => {
+export async function parseVariables(ctx, next) {
   const filter = ctx.action.params.filter;
   if (!filter) {
     return next();
@@ -44,12 +53,17 @@ export const parseVariables = async (ctx, next) => {
       return ctx.db.getFieldByPath(`${resourceName}.${fieldPath}`);
     },
     vars: {
+      // @deprecated
       $system: {
         now: new Date().toISOString(),
       },
+      // @deprecated
       $date: getDateVars(),
+      // 新的命名方式，防止和 formily 内置变量冲突
+      $nDate: getDateVars(),
       $user: getUser(ctx),
+      $nRole: ctx.state.currentRole,
     },
   });
   await next();
-};
+}

@@ -1,49 +1,90 @@
-const postgres = {
-  'character varying': 'string',
-  varchar: 'string',
-  text: 'text',
-  char: 'string',
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
 
-  smallint: 'integer',
-  integer: 'integer',
-  bigint: 'bigInt',
-  decimal: 'float',
+const postgres = {
+  'character varying': ['string', 'uuid', 'nanoid', 'encryption', 'datetimeNoTz'],
+  varchar: ['string', 'uuid', 'nanoid', 'encryption', 'datetimeNoTz'],
+  char: ['string', 'uuid', 'nanoid', 'encryption', 'datetimeNoTz'],
+
+  character: 'string',
+  text: 'text',
+  oid: 'string',
+  name: 'string',
+
+  smallint: ['integer', 'sort'],
+  integer: ['integer', 'unixTimestamp', 'sort'],
+  bigint: ['bigInt', 'unixTimestamp', 'sort'],
+  decimal: 'decimal',
   numeric: 'float',
+  real: 'float',
   'double precision': 'float',
 
-  'timestamp without time zone': 'date',
-  'timestamp with time zone': 'date',
-  date: 'date',
+  'timestamp without time zone': 'datetimeNoTz',
+  'timestamp with time zone': 'datetimeTz',
+  'time without time zone': 'time',
+
+  date: 'dateOnly',
   boolean: 'boolean',
 
   json: ['json', 'array'],
-  jsonb: ['jsonb', 'array'],
+  jsonb: ['json', 'array', 'jsonb'],
+
+  point: 'json',
+  path: 'json',
+  polygon: 'json',
+  circle: 'json',
+  uuid: 'uuid',
+  set: 'set',
+  array: 'array',
 };
 
 const mysql = {
-  varchar: 'string',
+  smallint: ['integer', 'boolean', 'sort'],
+  tinyint: ['integer', 'boolean', 'sort'],
+  mediumint: ['integer', 'boolean', 'sort'],
+
+  'smallint unsigned': ['integer', 'boolean', 'sort'],
+  'tinyint unsigned': ['integer', 'boolean', 'sort'],
+  'mediumint unsigned': ['integer', 'boolean', 'sort'],
+
+  char: ['string', 'uuid', 'nanoid', 'encryption'],
+  varchar: ['string', 'uuid', 'nanoid', 'encryption'],
+  date: 'dateOnly',
+  time: 'time',
+  tinytext: 'text',
   text: 'text',
-  int: 'integer',
-  integer: 'integer',
-  bigint: 'bigInt',
+  mediumtext: 'text',
+  longtext: 'text',
+  int: ['integer', 'unixTimestamp', 'sort'],
+  'int unsigned': ['integer', 'unixTimestamp', 'sort'],
+  integer: ['integer', 'unixTimestamp', 'sort'],
+  bigint: ['bigInt', 'unixTimestamp', 'sort'],
+  'bigint unsigned': ['bigInt', 'unixTimestamp', 'sort'],
   float: 'float',
   double: 'float',
   boolean: 'boolean',
-
-  tinyint: 'integer',
-  datetime: 'date',
-  timestamp: 'date',
+  decimal: 'decimal',
+  year: ['string', 'integer'],
+  datetime: ['datetimeNoTz', 'datetimeTz'],
+  timestamp: 'datetimeTz',
   json: ['json', 'array'],
+  enum: 'string',
 };
 
 const sqlite = {
   text: 'text',
-  varchar: 'string',
+  varchar: ['string', 'uuid', 'nanoid', 'encryption'],
 
   integer: 'integer',
   real: 'real',
 
-  datetime: 'date',
+  datetime: 'datetimeTz',
   date: 'date',
   time: 'time',
 
@@ -53,4 +94,5 @@ const sqlite = {
   json: ['json', 'array'],
 };
 
-export default { postgres, mysql, sqlite };
+const fieldTypeMap = { postgres, mysql, sqlite, mariadb: mysql };
+export default fieldTypeMap;

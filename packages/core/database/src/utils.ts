@@ -1,68 +1,16 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import crypto from 'crypto';
 import Database from './database';
 import { IdentifierError } from './errors/identifier-error';
-import { Model } from './model';
 import lodash from 'lodash';
-
-type HandleAppendsQueryOptions = {
-  templateModel: any;
-  queryPromises: Array<any>;
-};
-
-export async function handleAppendsQuery(options: HandleAppendsQueryOptions) {
-  const { templateModel, queryPromises } = options;
-
-  if (!templateModel) {
-    return [];
-  }
-
-  const primaryKey = templateModel.constructor.primaryKeyAttribute;
-
-  const results = await Promise.all(queryPromises);
-
-  let rows: Array<Model>;
-
-  for (const appendedResult of results) {
-    if (!rows) {
-      rows = appendedResult.rows;
-
-      if (rows.length == 0) {
-        return [];
-      }
-
-      const modelOptions = templateModel['_options'];
-      for (const row of rows) {
-        row['_options'] = {
-          ...row['_options'],
-          include: modelOptions['include'],
-          includeNames: modelOptions['includeNames'],
-          includeMap: modelOptions['includeMap'],
-        };
-      }
-      continue;
-    }
-
-    for (let i = 0; i < appendedResult.rows.length; i++) {
-      const appendingRow = appendedResult.rows[i];
-      const key = appendedResult.include.association;
-      const val = appendingRow.get(key);
-
-      const rowKey = appendingRow.get(primaryKey);
-
-      const targetIndex = rows.findIndex((row) => row.get(primaryKey) === rowKey);
-
-      if (targetIndex === -1) {
-        throw new Error('target row not found');
-      }
-
-      rows[targetIndex].set(key, val, {
-        raw: true,
-      });
-    }
-  }
-
-  return rows;
-}
 
 export function md5(value: string) {
   return crypto.createHash('md5').update(value).digest('hex');
@@ -100,7 +48,7 @@ function patchShowConstraintsQuery(queryGenerator, db) {
       `WHERE table_name='${lodash.isPlainObject(tableName) ? tableName.tableName : tableName}'`,
     ];
 
-    if (!constraintName) {
+    if (constraintName) {
       lines.push(`AND constraint_name='${constraintName}'`);
     }
 
@@ -167,4 +115,16 @@ export function percent2float(value: string) {
   const repeat = value.length - index - 2;
   const v = parseInt('1' + '0'.repeat(repeat));
   return (parseFloat(value) * v) / (100 * v);
+}
+
+export function isUndefinedOrNull(value: any) {
+  return typeof value === 'undefined' || value === null;
+}
+
+export function isStringOrNumber(value: any) {
+  return typeof value === 'string' || typeof value === 'number';
+}
+
+export function getKeysByPrefix(keys: string[], prefix: string) {
+  return keys.filter((key) => key.startsWith(`${prefix}.`)).map((key) => key.substring(prefix.length + 1));
 }

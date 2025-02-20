@@ -1,6 +1,18 @@
-import QueryInterface from './query-interface';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+/* istanbul ignore file -- @preserve */
+
 import { Collection } from '../collection';
 import sqlParser from '../sql-parser';
+import QueryInterface, { TableInfo } from './query-interface';
+import { Transaction } from 'sequelize';
 
 export default class SqliteQueryInterface extends QueryInterface {
   constructor(db) {
@@ -22,7 +34,7 @@ export default class SqliteQueryInterface extends QueryInterface {
 
   async listViews() {
     const sql = `
-      SELECT name , sql as definition
+      SELECT name, sql as definition
       FROM sqlite_master
       WHERE type = 'view'
       ORDER BY name;
@@ -41,19 +53,7 @@ export default class SqliteQueryInterface extends QueryInterface {
     };
   }> {
     try {
-      const viewDefinition = await this.db.sequelize.query(
-        `SELECT sql FROM sqlite_master WHERE name = '${options.viewName}' AND type = 'view'`,
-        {
-          type: 'SELECT',
-        },
-      );
-
-      const createView = viewDefinition[0]['sql'];
-      const regex = /(?<=AS\s)([\s\S]*)/i;
-      const match = createView.match(regex);
-      const sql = match[0];
-
-      const { ast } = sqlParser.parse(sql);
+      const { ast } = this.parseSQL(await this.viewDef(options.viewName));
 
       const columns = ast.columns;
 
@@ -75,5 +75,75 @@ export default class SqliteQueryInterface extends QueryInterface {
       this.db.logger.warn(e);
       return {};
     }
+  }
+
+  parseSQL(sql: string): any {
+    return sqlParser.parse(sql);
+  }
+
+  async viewDef(viewName: string): Promise<string> {
+    const viewDefinition = await this.db.sequelize.query(
+      `SELECT sql
+       FROM sqlite_master
+       WHERE name = '${viewName}' AND type = 'view'`,
+      {
+        type: 'SELECT',
+      },
+    );
+
+    const createView = viewDefinition[0]['sql'];
+    const regex = /(?<=AS\s)([\s\S]*)/i;
+    const match = createView.match(regex);
+    const sql = match[0];
+
+    return sql;
+  }
+
+  showTableDefinition(tableInfo: TableInfo): Promise<any> {
+    return Promise.resolve(undefined);
+  }
+
+  async getAutoIncrementInfo(options: { tableInfo: TableInfo; fieldName: string; transaction: Transaction }): Promise<{
+    seqName?: string;
+    currentVal: number;
+  }> {
+    const { tableInfo, transaction } = options;
+
+    const tableName = tableInfo.tableName;
+
+    const sql = `SELECT seq
+                 FROM sqlite_sequence
+                 WHERE name = '${tableName}';`;
+
+    const results = await this.db.sequelize.query(sql, { type: 'SELECT', transaction });
+
+    const row = results[0];
+
+    if (!row) {
+      return {
+        currentVal: 0,
+      };
+    }
+
+    return {
+      currentVal: row['seq'],
+    };
+  }
+
+  async setAutoIncrementVal(options: {
+    tableInfo: TableInfo;
+    columnName: string;
+    seqName?: string;
+    currentVal: number;
+    transaction?: Transaction;
+  }): Promise<void> {
+    const { tableInfo, columnName, seqName, currentVal, transaction } = options;
+
+    const tableName = tableInfo.tableName;
+
+    const sql = `UPDATE sqlite_sequence
+                 SET seq = ${currentVal}
+                 WHERE name = '${tableName}';`;
+    await this.db.sequelize.query(sql, { transaction });
   }
 }

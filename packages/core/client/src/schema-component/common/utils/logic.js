@@ -1,17 +1,21 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 /* globals define,module */
+
+import dayjs from 'dayjs';
+
 /*
 Using a Universal Module Loader that should be browser, require, and AMD friendly
 http://ricostacruz.com/cheatsheets/umdjs.html
 */
-(function (root, factory) {
-  if (typeof define === 'function' && define.amd) {
-    define(factory);
-  } else if (typeof exports === 'object') {
-    module.exports = factory();
-  } else {
-    root.jsonLogic = factory();
-  }
-})(this, function () {
+export function getJsonLogic() {
   'use strict';
   /* globals console:false */
 
@@ -35,6 +39,9 @@ http://ricostacruz.com/cheatsheets/umdjs.html
     }
     return a;
   }
+  function areArraysEqual(arr1, arr2) {
+    return JSON.stringify(arr1) === JSON.stringify(arr2);
+  }
 
   var jsonLogic = {};
   var operations = {
@@ -42,10 +49,19 @@ http://ricostacruz.com/cheatsheets/umdjs.html
       return a === b;
     },
     $match: function (a, b) {
+      if (Array.isArray(a) && Array.isArray(b) && a.some((element) => Array.isArray(element))) {
+        return a.some(
+          (subArray) => subArray?.length === b.length && subArray?.every((element, index) => element === b[index]),
+        );
+      }
       return JSON.stringify(a) === JSON.stringify(b);
     },
     $eq: function (a, b) {
-      return a === b;
+      if (Array.isArray(a) && Array.isArray(b)) return areArraysEqual(a, b);
+      if (Array.isArray(a)) {
+        return a.includes(b);
+      }
+      return a == b;
     },
     $ne: function (a, b) {
       return a != b;
@@ -54,12 +70,14 @@ http://ricostacruz.com/cheatsheets/umdjs.html
       return a !== b;
     },
     $gt: function (a, b) {
+      if (Array.isArray(a)) return a.some((k) => k > b);
       return a > b;
     },
     $gte: function (a, b) {
       return a >= b;
     },
     $lt: function (a, b, c) {
+      if (Array.isArray(a)) return a.some((k) => k < b);
       return c === undefined ? a < b : a < b && b < c;
     },
     $lte: function (a, b, c) {
@@ -72,6 +90,7 @@ http://ricostacruz.com/cheatsheets/umdjs.html
       return jsonLogic.truthy(a);
     },
     $empty: function (a) {
+      if (Array.isArray(a)) return a.some((k) => !jsonLogic.truthy(k));
       return !jsonLogic.truthy(a);
     },
     $notExists: function (a) {
@@ -81,11 +100,13 @@ http://ricostacruz.com/cheatsheets/umdjs.html
       return a % b;
     },
     log: function (a) {
-      console.log(a);
       return a;
     },
     $in: function (a, b) {
       if (!b || typeof b.indexOf === 'undefined') return false;
+      if (Array.isArray(a) && Array.isArray(b)) {
+        return b.some((elementB) => a.includes(elementB));
+      }
       return b.indexOf(a) !== -1;
     },
     $notIn: function (a, b) {
@@ -94,21 +115,31 @@ http://ricostacruz.com/cheatsheets/umdjs.html
     },
     $includes: function (a, b) {
       if (!a || typeof a.indexOf === 'undefined') return false;
+      if (Array.isArray(a)) return a.some((element) => element?.includes(b));
       return a.indexOf(b) !== -1;
     },
     $notIncludes: function (a, b) {
-      if (!a || typeof a.indexOf === 'undefined') return false;
-      return !(a.indexOf(b) !== -1);
+      if (Array.isArray(a)) return !a.some((element) => (element || '').includes(b));
+
+      a = a || '';
+
+      return !a.includes(b);
     },
     $anyOf: function (a, b) {
       if (a.length === 0) {
         return false;
       }
-      return b.every((item) => a.includes(item));
+      if (Array.isArray(a) && Array.isArray(b) && a.some((element) => Array.isArray(element))) {
+        return a.some((subArray) => subArray.some((element) => b.includes(element)));
+      }
+      return a.some((element) => b.includes(element));
     },
     $noneOf: function (a, b) {
-      if (a.length === 0) {
+      if (!a || a?.length === 0) {
         return true;
+      }
+      if (Array.isArray(a) && Array.isArray(b) && a.some((element) => Array.isArray(element))) {
+        return a.some((subArray) => subArray.every((element) => !b.some((bElement) => element.includes(bElement))));
       }
       return b.some((item) => !a.includes(item));
     },
@@ -124,10 +155,85 @@ http://ricostacruz.com/cheatsheets/umdjs.html
       }
       return false;
     },
+    $dateOn: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      return a === b;
+    },
+    $dateBefore: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      // Parse both date strings
+      const dateA = parseDate(a);
+      const dateB = parseDate(b);
+      if (!dateA || !dateB) {
+        throw new Error('Invalid date format');
+      }
+      return dateA < dateB;
+    },
+    $dateNotBefore: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      const dateA = parseDate(a);
+      const dateB = parseDate(b);
+
+      if (!dateA || !dateB) {
+        throw new Error('Invalid date format');
+      }
+
+      // Compare the two dates
+      return dateA >= dateB;
+    },
+    $dateAfter: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      // Parse both date strings
+      const dateA = parseDate(a);
+      const dateB = parseDate(b);
+
+      return dateA > dateB;
+    },
+    $dateNotAfter: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      const dateA = parseDate(a);
+      const dateB = parseDate(b);
+
+      if (!dateA || !dateB) {
+        throw new Error('Invalid date format');
+      }
+      return dateA <= dateB;
+    },
+    $dateBetween: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      const dateA = parseFullDate(a);
+      const dateBStart = parseFullDate(b[0]);
+      const dateBEnd = parseFullDate(b[1]);
+
+      if (!dateA || !dateBStart || !dateBEnd) {
+        throw new Error('Invalid date format');
+      }
+      return dateA >= dateBStart && dateA <= dateBEnd;
+    },
+    $dateNotOn: function (a, b) {
+      if (!a || !b) {
+        return false;
+      }
+      return a !== b;
+    },
     $isTruly: function (a) {
+      if (Array.isArray(a)) return a.some((k) => k === true || k === 1);
       return a === true || a === 1;
     },
     $isFalsy: function (a) {
+      if (Array.isArray(a)) return a.some((k) => !jsonLogic.truthy(k));
       return !jsonLogic.truthy(a);
     },
     cat: function () {
@@ -243,7 +349,7 @@ http://ricostacruz.com/cheatsheets/umdjs.html
 
   /*
     This helper will defer to the JsonLogic spec as a tie-breaker when different language interpreters define different behavior for the truthiness of primitives.  E.g., PHP considers empty arrays to be falsy, but Javascript considers them to be truthy. JsonLogic, as an ecosystem, needs one consistent answer.
-  
+
     Spec and rationale here: http://jsonlogic.com/truthy
     */
   jsonLogic.truthy = function (value) {
@@ -293,7 +399,7 @@ http://ricostacruz.com/cheatsheets/umdjs.html
         if( 0 ){ 1 }else{ 2 };
         if( 0 ){ 1 }else if( 2 ){ 3 }else{ 4 };
         if( 0 ){ 1 }else if( 2 ){ 3 }else if( 4 ){ 5 }else{ 6 };
-  
+
         The implementation is:
         For pairs of values (0,1 then 2,3 then 4,5 etc)
         If the first evaluates truthy, evaluate and return the second
@@ -523,4 +629,46 @@ http://ricostacruz.com/cheatsheets/umdjs.html
   };
 
   return jsonLogic;
-});
+}
+
+function parseFullDate(dateStr) {
+  return new Date(dateStr);
+}
+
+function parseMonth(dateStr) {
+  const [year, month] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1);
+}
+
+function parseQuarter(dateStr) {
+  const year = parseInt(dateStr.slice(0, 4));
+  const quarter = parseInt(dateStr.slice(5, 6));
+  const month = (quarter - 1) * 3;
+  return new Date(year, month);
+}
+
+function parseYear(dateStr) {
+  const year = parseInt(dateStr);
+  return new Date(year, 0);
+}
+
+function parseDate(targetDateStr) {
+  let dateStr = Array.isArray(targetDateStr) ? targetDateStr[1] : targetDateStr;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(dateStr)) {
+    // ISO 8601 格式：YYYY-MM-DDTHH:mm:ss.sssZ
+    return new Date(dateStr); // 直接解析为 Date 对象
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    // YYYY-MM-DD 格式
+    return parseFullDate(dateStr);
+  } else if (/^\d{4}-\d{2}$/.test(dateStr)) {
+    // YYYY-MM 格式
+    return parseMonth(dateStr);
+  } else if (/^\d{4}Q[1-4]$/.test(dateStr)) {
+    // YYYYQn 格式
+    return parseQuarter(dateStr);
+  } else if (/^\d{4}$/.test(dateStr)) {
+    // YYYY 格式
+    return parseYear(dateStr);
+  }
+  return null; // Invalid format
+}

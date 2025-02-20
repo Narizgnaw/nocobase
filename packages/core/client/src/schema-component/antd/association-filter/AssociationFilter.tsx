@@ -1,24 +1,39 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { css } from '@emotion/css';
 import { useFieldSchema } from '@formily/react';
 import cls from 'classnames';
 import React from 'react';
-import { useCollection } from '../../../collection-manager';
-import { useSchemaInitializer } from '../../../schema-initializer';
+import { useSchemaInitializerRender } from '../../../application';
+import { Plugin } from '../../../application/Plugin';
+import { useCollection } from '../../../data-source/collection/CollectionProvider';
+import {
+  associationFilterFilterBlockInitializer,
+  filterCollapseItemInitializer,
+  filterCollapseItemInitializer_deprecated,
+} from '../../../modules/blocks/filter-blocks/collapse/filterCollapseItemInitializer';
 import { DndContext, SortableItem } from '../../common';
 import { useDesigner } from '../../hooks';
+import { useToken } from '../__builtins__';
 import { AssociationFilterBlockDesigner } from './AssociationFilter.BlockDesigner';
-import { AssociationFilterFilterBlockInitializer } from './AssociationFilter.FilterBlockInitializer';
-import { AssociationFilterInitializer } from './AssociationFilter.Initializer';
+import { associationFilterInitializer } from './AssociationFilter.Initializer';
 import { AssociationFilterItem } from './AssociationFilter.Item';
 import { AssociationFilterItemDesigner } from './AssociationFilter.Item.Designer';
 import { AssociationFilterProvider } from './AssociationFilterProvider';
-
+import { useAssociationFilterHeight } from './hook';
 export const AssociationFilter = (props) => {
+  const { token } = useToken();
   const Designer = useDesigner();
   const filedSchema = useFieldSchema();
-
-  const { render } = useSchemaInitializer(filedSchema['x-initializer']);
-
+  const height = useAssociationFilterHeight();
+  const { render } = useSchemaInitializerRender(filedSchema['x-initializer'], filedSchema['x-initializer-props']);
   return (
     <DndContext>
       <SortableItem
@@ -26,9 +41,10 @@ export const AssociationFilter = (props) => {
           'nb-block-item',
           props.className,
           css`
-            height: 100%;
+            height: ${height ? height + 'px' : '100%'};
             overflow-y: auto;
             position: relative;
+            border-radius: ${token.borderRadiusLG}px;
             &:hover {
               > .general-schema-designer {
                 display: block;
@@ -36,7 +52,7 @@ export const AssociationFilter = (props) => {
             }
             &.nb-form-item:hover {
               > .general-schema-designer {
-                background: rgba(241, 139, 98, 0.06) !important;
+                background: var(--colorBgSettingsHover) !important;
                 border: 0 !important;
                 top: -5px !important;
                 bottom: -5px !important;
@@ -52,7 +68,7 @@ export const AssociationFilter = (props) => {
               left: 0;
               right: 0;
               display: none;
-              border: 2px solid rgba(241, 139, 98, 0.3);
+              border: 2px solid var(--colorBorderSettingsHover);
               pointer-events: none;
               > .general-schema-designer-icons {
                 position: absolute;
@@ -61,11 +77,12 @@ export const AssociationFilter = (props) => {
                 line-height: 16px;
                 pointer-events: all;
                 .ant-space-item {
-                  background-color: #f18b62;
+                  background-color: var(--colorSettings);
                   color: #fff;
                   line-height: 16px;
                   width: 16px;
                   padding-left: 1px;
+                  align-self: stretch;
                 }
               }
             }
@@ -81,8 +98,6 @@ export const AssociationFilter = (props) => {
 };
 
 AssociationFilter.Provider = AssociationFilterProvider;
-AssociationFilter.Initializer = AssociationFilterInitializer;
-AssociationFilter.FilterBlockInitializer = AssociationFilterFilterBlockInitializer;
 AssociationFilter.Item = AssociationFilterItem as typeof AssociationFilterItem & {
   Designer: typeof AssociationFilterItemDesigner;
 };
@@ -91,6 +106,15 @@ AssociationFilter.BlockDesigner = AssociationFilterBlockDesigner;
 
 AssociationFilter.useAssociationField = () => {
   const fieldSchema = useFieldSchema();
-  const { getField } = useCollection();
-  return React.useMemo(() => getField(fieldSchema.name as any), [fieldSchema.name]);
+  const collection = useCollection();
+  return React.useMemo(() => collection.getField(fieldSchema.name as any), [fieldSchema.name]);
 };
+
+export class AssociationFilterPlugin extends Plugin {
+  async load() {
+    this.app.schemaInitializerManager.add(associationFilterFilterBlockInitializer);
+    this.app.schemaInitializerManager.add(filterCollapseItemInitializer_deprecated);
+    this.app.schemaInitializerManager.add(filterCollapseItemInitializer);
+    this.app.schemaInitializerManager.add(associationFilterInitializer);
+  }
+}

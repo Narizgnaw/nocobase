@@ -1,10 +1,95 @@
-import QueryInterface from './query-interface';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import lodash from 'lodash';
 import { Collection } from '../collection';
 import sqlParser from '../sql-parser';
+import QueryInterface, { TableInfo } from './query-interface';
+import { Transaction } from 'sequelize';
 
 export default class PostgresQueryInterface extends QueryInterface {
   constructor(db) {
     super(db);
+  }
+
+  async setAutoIncrementVal(options: {
+    tableInfo: TableInfo;
+    columnName: string;
+    seqName?: string;
+    currentVal?: number;
+    transaction?: Transaction;
+  }): Promise<void> {
+    const { tableInfo, columnName, seqName, currentVal, transaction } = options;
+
+    if (!seqName) {
+      throw new Error('seqName is required to set auto increment val in postgres');
+    }
+
+    await this.db.sequelize.query(
+      `alter table ${this.db.utils.quoteTable({
+        tableName: tableInfo.tableName,
+        schema: tableInfo.schema,
+      })}
+            alter column "${columnName}" set default nextval('${seqName}')`,
+      {
+        transaction,
+      },
+    );
+
+    if (currentVal) {
+      await this.db.sequelize.query(`select setval('${seqName}', ${currentVal})`, {
+        transaction,
+      });
+    }
+  }
+
+  async getAutoIncrementInfo(options: {
+    tableInfo: TableInfo;
+    fieldName: string;
+    transaction: Transaction;
+  }): Promise<{ seqName?: string; currentVal: number }> {
+    const fieldName = options.fieldName || 'id';
+    const tableInfo = options.tableInfo;
+    const transaction = options.transaction;
+
+    const sequenceNameResult = await this.db.sequelize.query(
+      `SELECT column_default
+           FROM information_schema.columns
+           WHERE table_name = '${tableInfo.tableName}'
+             and table_schema = '${tableInfo.schema || 'public'}'
+             and "column_name" = '${fieldName}';`,
+      {
+        transaction,
+      },
+    );
+
+    const columnDefault = sequenceNameResult[0][0]['column_default'];
+
+    const regex = new RegExp(/nextval\('(.*)'::regclass\)/);
+    const match = regex.exec(columnDefault);
+
+    const sequenceName = match[1];
+
+    const sequenceCurrentValResult = await this.db.sequelize.query(
+      `select last_value
+           from ${sequenceName}`,
+      {
+        transaction,
+      },
+    );
+
+    const sequenceCurrentVal = parseInt(sequenceCurrentValResult[0][0]['last_value']);
+
+    return {
+      seqName: sequenceName,
+      currentVal: sequenceCurrentVal,
+    };
   }
 
   async collectionTableExists(collection: Collection, options?) {
@@ -33,6 +118,25 @@ export default class PostgresQueryInterface extends QueryInterface {
     return await this.db.sequelize.query(sql, { type: 'SELECT' });
   }
 
+  async viewDef(viewName: string) {
+    const [schema, name] = viewName.split('.');
+
+    const viewDefQuery = await this.db.sequelize.query(
+      `
+    select pg_get_viewdef(format('%I.%I', '${schema}', '${name}')::regclass, true) as definition
+    `,
+      { type: 'SELECT' },
+    );
+
+    return lodash.trim(viewDefQuery[0]['definition']);
+  }
+
+  parseSQL(sql: string): any {
+    return sqlParser.parse(sql, {
+      database: 'Postgresql',
+    });
+  }
+
   async viewColumnUsage(options): Promise<{
     [view_column_name: string]: {
       column_name: string;
@@ -54,16 +158,10 @@ export default class PostgresQueryInterface extends QueryInterface {
       table_schema: string;
     }>;
 
-    const viewDefQuery = await this.db.sequelize.query(
-      `
-    select pg_get_viewdef(format('%I.%I', '${schema}', '${viewName}')::regclass, true) as definition
-    `,
-      { type: 'SELECT' },
-    );
+    const def = await this.viewDef(`${schema}.${viewName}`);
 
-    const def = viewDefQuery[0]['definition'];
     try {
-      const { ast } = sqlParser.parse(def);
+      const { ast } = this.parseSQL(def);
       const columns = ast[0].columns;
 
       const usages = columns
@@ -74,10 +172,14 @@ export default class PostgresQueryInterface extends QueryInterface {
 
             // handle column alias
             const from = ast[0].from;
-            const findAs = from.find((from) => from.as === columnExprTable);
+            if (columnExprTable === null && column.expr.type === 'column_ref') {
+              columnExprTable = from[0].table;
+            } else {
+              const findAs = from.find((from) => from.as === columnExprTable);
 
-            if (findAs) {
-              columnExprTable = findAs.table;
+              if (findAs) {
+                columnExprTable = findAs.table;
+              }
             }
 
             return columnUsage.column_name === column.expr.column && columnUsage.table_name === columnExprTable;
@@ -96,8 +198,38 @@ export default class PostgresQueryInterface extends QueryInterface {
 
       return Object.fromEntries(usages);
     } catch (e) {
-      this.db.logger.warn(e);
+      console.log(e);
       return {};
     }
+  }
+
+  async showTableDefinition(tableInfo: TableInfo): Promise<any> {
+    const showFunc = `
+CREATE OR REPLACE FUNCTION show_create_table(p_schema text, p_table_name text)
+RETURNS text AS
+$BODY$
+SELECT 'CREATE TABLE ' || quote_ident(p_schema) || '.' || quote_ident(p_table_name) || ' (' || E'\\n' || '' ||
+    string_agg(column_list.column_expr, ', ' || E'\\n' || '') ||
+    '' || E'\\n' || ');'
+FROM (
+  SELECT '    ' || quote_ident(column_name) || ' ' || data_type ||
+       coalesce('(' || character_maximum_length || ')', '') ||
+       case when is_nullable = 'YES' then '' else ' NOT NULL' end as column_expr
+  FROM information_schema.columns
+  WHERE table_schema = p_schema AND table_name = p_table_name
+  ORDER BY ordinal_position) column_list;
+$BODY$
+  LANGUAGE SQL STABLE;
+    `;
+    await this.db.sequelize.query(showFunc, { type: 'RAW' });
+
+    const res = await this.db.sequelize.query(
+      `SELECT show_create_table('${tableInfo.schema || 'public'}', '${tableInfo.tableName}')`,
+      {
+        type: 'SELECT',
+      },
+    );
+
+    return res[0]['show_create_table'];
   }
 }

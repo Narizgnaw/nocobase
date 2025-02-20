@@ -1,4 +1,9 @@
 {
+  "env": {
+    "node": true,
+    "es6": true,
+    "browser": true
+  },
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
@@ -14,7 +19,9 @@
     "react",
     "react-hooks",
     "prettier",
-    "promise"
+    "promise",
+    "jest-dom",
+    "testing-library"
     //"import"
   ],
   "globals": {
@@ -31,10 +38,14 @@
     "sourceType": "module",
     "ecmaFeatures": {
       "jsx": true
-    }
+    },
+    "project": "./tsconfig.json"
   },
   "rules": {
+    "@typescript-eslint/no-this-alias": "off",
+    "@typescript-eslint/ban-types": "off",
     "no-unused-vars": "off",
+    "no-useless-catch": "off",
     "@typescript-eslint/no-unused-vars": "off",
     "no-empty-function": "off",
     "@typescript-eslint/no-empty-function": "off",
@@ -43,6 +54,18 @@
     "no-explicit-any": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/ban-ts-comment": "off",
-    "@typescript-eslint/no-var-requires": "off"
-  }
+    "@typescript-eslint/no-var-requires": "off",
+    "promise/always-return": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/e2e/**/*.{ts,js,tsx,jsx}",
+        "**/__e2e__/**/*.{ts,js,tsx,jsx}"
+      ],
+      "rules": {
+        "@typescript-eslint/no-floating-promises": "error"
+      }
+    }
+  ]
 }

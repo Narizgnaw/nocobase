@@ -1,12 +1,22 @@
-import { Cascader } from '@formily/antd';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { useField, useForm } from '@formily/react';
-import { Input, Select, Spin, Table, Tag } from 'antd';
+import { Cascader, Input, Select, Spin, Table, Tag } from 'antd';
+import { last, omit } from 'lodash';
 import React, { useContext, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResourceActionContext, useCompile } from '../../../';
 import { useAPIClient } from '../../../api-client';
-import { getOptions } from '../../Configuration/interfaces';
-import { useCollectionManager } from '../../hooks/useCollectionManager';
+import { useFieldInterfaceOptions } from '../../Configuration/interfaces';
+import { useCollectionManager_deprecated } from '../../hooks/useCollectionManager_deprecated';
+import { UnSupportFields } from './UnSupportFields';
 
 const getInterfaceOptions = (data, type) => {
   const interfaceOptions = [];
@@ -28,27 +38,50 @@ const PreviewCom = (props) => {
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState([]);
   const [sourceFields, setSourceFields] = useState([]);
+  const [sourceCollections, setSourceCollections] = useState(sources);
+  const [unsupportedFields, setUnsupportedFields] = useState([]);
   const field: any = useField();
   const form = useForm();
-  const { getCollection, getInterface } = useCollectionManager();
+  const { getCollection, getInterface, getCollectionFields, getInheritCollections, getParentCollectionFields } =
+    useCollectionManager_deprecated();
   const compile = useCompile();
-  const initOptions = getOptions().filter((v) => !['relation', 'systemInfo'].includes(v.key));
+  const options = useFieldInterfaceOptions();
+  const initOptions = options.filter((v) => !['relation', 'systemInfo'].includes(v.key));
   useEffect(() => {
     const data = [];
-    sources.forEach((item) => {
+    sourceCollections.forEach((item) => {
       const collection = getCollection(item);
-      const children = collection.fields?.map((v) => {
-        return { value: v.name, label: v.uiSchema?.title };
+      const inherits = getInheritCollections(item);
+      const result: any[] = inherits.map((v) => {
+        const fields = getParentCollectionFields(v, item);
+        return {
+          type: 'group',
+          key: v,
+          label: t(`Parent collection fields`) + t(`(${getCollection(v).title})`),
+          children: fields
+            .filter((v) => !['hasOne', 'hasMany', 'belongsToMany'].includes(v?.type))
+            .map((k) => {
+              return {
+                value: k.name,
+                label: t(k.uiSchema?.title),
+              };
+            }),
+        };
       });
+      const children = collection.fields
+        .filter((v) => !['obo', 'oho', 'm2m', 'o2m'].includes(v?.interface))
+        ?.map((v) => {
+          return { value: v.name, key: v.name, label: t(v.uiSchema?.title || v.name) };
+        })
+        .concat(result);
       data.push({
         value: item,
-        label: collection.title,
+        label: t(collection.title || collection.name),
         children,
       });
     });
     setSourceFields(data);
-  }, [sources, databaseView]);
-
+  }, [sourceCollections, databaseView]);
   useEffect(() => {
     if (databaseView) {
       setLoading(true);
@@ -61,16 +94,28 @@ const PreviewCom = (props) => {
             setDataSource([]);
             const fieldsData = Object.values(data?.data?.fields)?.map((v: any) => {
               if (v.source) {
-                return v;
+                const option = fields?.data.find((h) => h.name === v.name) || v;
+                return {
+                  ...v,
+                  uiSchema: { ...omit(option.uiSchema, 'rawTitle'), title: option.uiSchema?.title || option.name },
+                };
               } else {
-                return fields?.data.find((h) => h.name === v.name) || v;
+                const option = fields?.data.find((h) => h.name === v.name) || v;
+                return {
+                  ...option,
+                  uiSchema: { ...omit(option.uiSchema, 'rawTitle'), title: option.uiSchema?.title || option.name },
+                };
               }
             });
             field.value = fieldsData;
-            setDataSource(fieldsData);
-            form.setValuesIn('sources', data.data?.sources);
+            setTimeout(() => {
+              setDataSource(fieldsData);
+              form.setValuesIn('sources', data.data?.sources);
+              setSourceCollections(data.data?.sources);
+              setUnsupportedFields(data?.data?.unsupportedFields);
+            });
           }
-        });
+        }).catch;
     }
   }, [databaseView]);
 
@@ -78,9 +123,10 @@ const PreviewCom = (props) => {
     dataSource.splice(index, 1, record);
     setDataSource(dataSource);
     field.value = dataSource.map((v) => {
+      const source = typeof v.source === 'string' ? v.source : v.source?.filter?.(Boolean)?.join('.');
       return {
         ...v,
-        source: typeof v.source === 'string' ? v.source : v.source?.join('.'),
+        source,
       };
     });
   };
@@ -104,7 +150,8 @@ const PreviewCom = (props) => {
             style={{ width: '100%' }}
             options={compile(sourceFields)}
             onChange={(value, selectedOptions) => {
-              handleFieldChange({ ...record, source: value }, index);
+              const sourceField = getCollectionFields(value?.[0])?.find((v) => v.name === last(value));
+              handleFieldChange({ ...record, source: value, uiSchema: sourceField?.uiSchema }, index);
             }}
             placeholder={t('Select field source')}
           />
@@ -123,6 +170,7 @@ const PreviewCom = (props) => {
         ) : (
           <Select
             defaultValue={text}
+            popupMatchSelectWidth={false}
             style={{ width: '100%' }}
             options={
               item?.possibleTypes.map((v) => {
@@ -148,6 +196,7 @@ const PreviewCom = (props) => {
           <Select
             defaultValue={text}
             style={{ width: '100%' }}
+            popupMatchSelectWidth={false}
             onChange={(value) => {
               const interfaceConfig = getInterface(value);
               handleFieldChange({ ...item, interface: value, uiSchema: interfaceConfig?.default?.uiSchema }, index);
@@ -156,7 +205,7 @@ const PreviewCom = (props) => {
             {data.map((group) => (
               <Select.OptGroup key={group.key} label={compile(group.label)}>
                 {group.children.map((item) => (
-                  <Select.Option key={item.value} value={item.value}>
+                  <Select.Option key={item.value} value={item.name}>
                     {compile(item.label)}
                   </Select.Option>
                 ))}
@@ -175,9 +224,12 @@ const PreviewCom = (props) => {
         const item = dataSource[index];
         return (
           <Input
-            defaultValue={record?.uiSchema?.title || text}
+            defaultValue={item?.uiSchema?.title || text}
             onChange={(e) =>
-              handleFieldChange({ ...item, uiSchema: { ...item?.uiSchema, title: e.target.value } }, index)
+              handleFieldChange(
+                { ...item, uiSchema: { ...omit(item?.uiSchema, 'rawTitle'), title: e.target.value } },
+                index,
+              )
             }
           />
         );
@@ -188,7 +240,7 @@ const PreviewCom = (props) => {
     <Spin spinning={loading}>
       {dataSource.length > 0 && (
         <>
-          <div className="ant-formily-item-label">
+          <div className="ant-formily-item-label" style={{ display: 'flex', padding: '0 0 8px' }}>
             <div className="ant-formily-item-label-content">
               <span>
                 <label>{t('Fields')}</label>
@@ -208,12 +260,18 @@ const PreviewCom = (props) => {
           />
         </>
       )}
+      <UnSupportFields dataSource={unsupportedFields} />
     </Spin>
   );
 };
 
 function areEqual(prevProps, nextProps) {
-  return nextProps.name === prevProps.name && nextProps.sources === prevProps.sources;
+  return (
+    nextProps.viewName === prevProps.viewName &&
+    nextProps.schema === prevProps.schema &&
+    nextProps.source === prevProps.source
+  );
 }
 
 export const PreviewFields = React.memo(PreviewCom, areEqual);
+PreviewFields.displayName = 'PreviewFields';
